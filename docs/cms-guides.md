@@ -379,7 +379,7 @@ Or edit your Ghost theme's `.hbs` template files:
 
 ## Next.js / React
 
-See the `@generative-sites/core` package. No script tag needed — use the data attributes directly in JSX:
+No special package needed — use the `data-gs-zone` attributes directly in JSX:
 
 ```tsx
 export default function Hero() {

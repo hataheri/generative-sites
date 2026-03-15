@@ -1,155 +1,148 @@
 # Property Zones — Direct Memory Lookup
 
-Property zones let you pull personalized content directly from Personize memory properties — **no LLM call at serve time**. They are deterministic, instant, and cost-free after the memory is stored.
+Property zones pull personalized content directly from Personize memory properties — **no LLM call at serve time**. Instant, deterministic, zero generation cost.
 
-## Zone ID Syntax
+---
+
+## Syntax
 
 ```html
-<!-- Plain zone — AI-generated -->
-<h1 data-gs-zone="headline">Default headline</h1>
-
-<!-- Property zone — read from Personize memory -->
+<!-- Property zone: reads from Personize memory -->
 <h1 data-gs-zone="website_zones:hero_headline">Default headline</h1>
+
+<!-- Generative zone: AI-written (for comparison) -->
+<h1 data-gs-zone="headline">Default headline</h1>
 ```
 
 The colon separates:
 - **Left**: collection system name (e.g. `website_zones`)
 - **Right**: property system name (e.g. `hero_headline`)
 
-## Setting Up a Collection for Website Zones
+---
 
-In your Personize account, create a collection dedicated to website personalization:
+## Setting Up
 
-```
-Collection name:        Website Zones
-Collection system name: website_zones
-Type:                   Contact
-```
-
-Add properties for each zone on your site:
-
-| Property name  | System name    | Type | Description                                | Example value                                |
-|----------------|----------------|------|--------------------------------------------|----------------------------------------------|
-| Hero Headline  | `hero_headline`| Text | Personalized headline for the hero section | "How Acme scaled API ops by 3×"              |
-| Sub Headline   | `sub_headline` | Text | Supporting text below the headline         | "The platform built for API-first teams"      |
-| CTA Text       | `cta_text`     | Text | Call-to-action button label                | "See Sarah's custom demo"                    |
-| Proof Statement| `proof`        | Text | Social proof relevant to their industry    | "Trusted by fintech teams processing $2B/yr" |
-| Value Prop     | `value_prop`   | Text | Value proposition for their use case       | "Cut API incident response time by 60%"      |
-
-### Why dedicated descriptions and examples matter
-
-Personize uses the property description and examples to **guide extraction accuracy** when you run enrichment pipelines. A property like this:
+### 1. Create a collection in Personize
 
 ```
-Property: Hero Headline
-Description: A personalized hero section headline (8-12 words) that references
-             the contact's specific business challenge or outcome. Should feel
-             written for them, not generic.
-Example:     "How Acme Corp eliminated API downtime with automated monitoring"
-Example:     "Why FinTech Solutions chose us for real-time payment processing"
+Personize Dashboard → Memory → Collections → + Create Collection
+
+  Collection name:        Website Zones
+  Collection system name: website_zones
+  Entity type:            Contact
 ```
 
-…produces far better results than a bare `hero_headline` field with no guidance.
+### 2. Add properties with descriptions and examples
 
-## Populating Properties
+| Property | System Name | Type | Description | Example |
+|---|---|---|---|---|
+| Hero Headline | `hero_headline` | Text | Personalized headline (8-12 words) referencing their challenge | "How Acme Corp Scaled API Operations by 3x" |
+| Sub Headline | `sub_headline` | Text | Supporting text below headline (15-25 words) | "The platform built for API-first teams" |
+| CTA Text | `cta_text` | Text | Call-to-action button label (3-5 words) | "See Sarah's custom demo" |
 
-### Option A — CRM sync pipeline
+**Why descriptions matter:** Personize uses them to guide AI extraction accuracy when you store content with `enhanced: true`.
+
+### 3. Populate properties for each contact
+
+Use any method:
 
 ```typescript
-// pipelines/sync-website-zones.ts
-import { Personize } from '@personize/sdk';
-
-const personize = new Personize({ secretKey: process.env.PERSONIZE_SECRET_KEY });
-
+// Via pipeline, agent, SDK, or Zapier
 await personize.memory.memorize({
   email: 'sarah@acme.com',
   content: `
-    Hero headline: How Acme Corp scaled API operations without adding headcount
-    Sub headline: Purpose-built for platform engineering teams at growth-stage companies
-    CTA text: Start Sarah's free trial
-    Proof: Used by 40+ fintech teams to reduce API incident response time
+    Hero headline: How Acme Corp Scaled API Operations by 3x
+    Sub headline: The platform built for API-first engineering teams
+    CTA text: See Sarah's custom demo
   `,
   collection: 'website_zones',
-  enhanced: true,    // uses AI to extract into structured properties
-  tags: ['website-personalization'],
+  enhanced: true,    // AI extracts into structured properties
 });
 ```
 
-### Option B — Batch enrichment from CRM data
+### 4. Reference in HTML
 
-```typescript
-// Run a batch enrichment pipeline that reads from HubSpot,
-// generates zone values per contact, and stores them in Personize.
-
-const contacts = await hubspot.getContacts();
-for (const contact of contacts) {
-  const zoneContent = await generateZoneContent(contact); // your AI call
-  await personize.memory.memorize({
-    email: contact.email,
-    content: zoneContent,
-    collection: 'website_zones',
-    enhanced: true,
-  });
-}
+```html
+<h1 data-gs-zone="website_zones:hero_headline"
+    data-gs-identify="website_zones:slug">
+  Default headline
+</h1>
+<p data-gs-zone="website_zones:sub_headline">Default subheadline</p>
+<span data-gs-zone="website_zones:cta_text">Book a Demo</span>
 ```
 
-### Option C — Manual import via CSV
+---
 
-Upload a CSV with columns matching your property system names. Personize ingests it and populates each contact's collection.
-
-## How It Works at Serve Time
+## How it works at serve time
 
 ```
-Visitor arrives at /for/sarah-chen-acme
-         │
-         ▼
-gs.js discovers zones: ["website_zones:hero_headline", "website_zones:sub_headline", "cta-text"]
-         │
-         ▼
-Split by type:
-  Property zones → ["website_zones:hero_headline", "website_zones:sub_headline"]
-  Generative zones → ["cta-text"]
-         │
-         ├─── Property zones: recall() from Personize memory  ──→ instant (<50ms)
-         │                    No LLM call. Pure property lookup.
-         │
-         └─── Generative zones: prompt() via Personize AI     ──→ 2–5s
-                               Uses smartDigest + brand guidelines.
-         │
-         ▼
-Stream both results to browser as SSE events.
-gs.js replaces textContent for each zone.
+gs.js discovers zones:
+  website_zones:hero_headline
+  website_zones:sub_headline
+  website_zones:cta_text
+
+gs.js reads data-gs-identify="website_zones:slug"
+  → extracts slug from URL: /for/sarah-chen → "sarah-chen"
+
+Edge API:
+  → searches website_zones where slug = "sarah-chen"
+  → gets ONE record with ALL properties:
+      {
+        slug: "sarah-chen",
+        hero_headline: "How Acme Corp Scaled API Operations by 3x",
+        sub_headline: "The platform built for API-first teams",
+        cta_text: "See Sarah's custom demo"
+      }
+  → serves all 3 zones from this one record
+
+One API call. All zones. Instant.
 ```
 
-## Bake Mode (Pre-generation)
+---
 
-When baking for ABM campaigns:
+## Mixing property and generative zones
 
-- **Property zones**: resolved at bake time via `recall()`. Zero LLM calls. Stored in KV instantly.
-- **Generative zones**: one `prompt()` call per contact covering all generative zones.
+```html
+<!-- Property zones: instant, from memory -->
+<h1 data-gs-zone="website_zones:hero_headline"
+    data-gs-identify="website_zones:slug">Welcome</h1>
+<p data-gs-zone="website_zones:sub_headline">Built for teams</p>
 
-This means a contact with 4 property zones and 2 generative zones costs **1 LLM call** total — not 6.
-
-```typescript
-const zones = [
-  // Property zones — from Personize collection
-  { id: 'website_zones:hero_headline' },
-  { id: 'website_zones:sub_headline' },
-
-  // Generative zones — AI-written at bake time
-  { id: 'proof', prompt: 'Write social proof relevant to their industry.' },
-  { id: 'cta-text', prompt: 'Write a CTA with their first name, max 5 words.' },
-];
-
-await bakeCampaign(contacts, { zones, ... });
+<!-- Generative zones: AI-written with context -->
+<span data-gs-zone="cta-text"
+      data-gs-prompt="CTA with their first name, max 5 words">
+  Get Started
+</span>
+<p data-gs-zone="proof"
+   data-gs-prompt="Social proof relevant to their industry">
+  Trusted by 500+ companies
+</p>
 ```
 
-## Fallback Behavior
+Property zones cost **zero**. Generative zones cost **one prompt() call** total (batched). A page with 4 property zones and 2 generative zones = 1 LLM call.
 
-If a contact has no stored value for a property zone, the zone's fallback text (the element's existing `textContent`) is kept unchanged. No error is shown to the visitor.
+---
 
-This is safe by design — you can deploy property zones before all contacts have values populated. They'll resolve as data becomes available.
+## Fallback behavior
 
-## Anonymous Visitors
+If a contact has no stored value for a property zone, the fallback text (the element's existing content) stays unchanged. No error shown. Safe to deploy zones before all contacts have data.
 
-Property zones require a known contact. Anonymous visitors (no email in identity) always fall back to default text — property lookup is skipped entirely without error.
+Anonymous visitors always see fallback text for property zones — property lookup requires a known contact.
+
+---
+
+## For web apps (auth session)
+
+Property zones also work with `window.__GS_USER__`:
+
+```html
+<script>window.__GS_USER__ = { email: 'sarah@acme.com' };</script>
+<script src="https://gs.personize.ai/gs.js" data-key="pk_live_..." async></script>
+
+<!-- Add data-gs-identify for fast bulk loading -->
+<h1 data-gs-zone="dashboard:greeting"
+    data-gs-identify="dashboard:email">Welcome back</h1>
+<p data-gs-zone="dashboard:insight">Your summary</p>
+```
+
+Auth provides the email. `data-gs-identify` tells the Edge API to load the full record in one call.

@@ -1,316 +1,111 @@
 # Security Model
 
-Every attack surface in Generative Sites, what's protected, what's not, and what to watch for.
+Every attack surface in Generative Sites — what's protected, what's not, and what to watch for.
 
 ---
 
-## Architecture Security Overview
+## Architecture
 
 ```
 BROWSER (untrusted)                    EDGE API (trusted)                PERSONIZE (trusted)
 ────────────────────                   ──────────────────                ─────────────────────
 
-gs.js                                  Server process                   Cloud API
+gs.js                                  gs.personize.ai                  Cloud API
   │                                      │                                │
   │  pk_live_ (site label,               │  sk_live_ (secret key,         │  Full API access
-  │  safe to expose,                     │  full Personize access,        │  Memory, AI,
-  │  cannot call Personize)              │  never leaves server)          │  Governance
+  │  safe to expose,                     │  never leaves server,          │  Memory, AI,
+  │  cannot call Personize)              │  resolved per-tenant)          │  Governance
   │                                      │                                │
-  ├─ SSE connection ──────────────────►  ├─ Validates pk_live_ (HMAC)     │
-  │  sends: key, zones, url, uid         │  Derives site ID               │
-  │                                      │  Rate-limits per key           │
-  │  receives: zone text (plain text)    ├─ Resolves identity ──────────► │
-  │  NO HTML, NO scripts                 │  Calls smartDigest() ────────► │
-  │                                      │  Calls prompt() ─────────────► │
+  ├─ SSE ────────────────────────────►  ├─ Validates pk_live_             │
+  │  sends: key, zones, url, utms       │  Resolves identity             │
+  │                                      │  Calls smartDigest() ────────► │
+  │  receives: plain text only           │  Calls prompt() ─────────────► │
+  │  (never HTML, never scripts)         │                                │
+  │                                      │                                │
   ├─ POST /event ─────────────────────►  ├─ Memorizes events ───────────► │
-  │  sends: events (page views, clicks)  │                                │
-  │                                      │                                │
   ├─ POST /identify ──────────────────►  ├─ Memorizes identity ─────────► │
-  │  sends: email, traits                │                                │
-  │                                      │                                │
   ├─ POST /memorize ──────────────────►  ├─ Writes to collection ───────► │
-  │  sends: collection:property, value   │  (requires identified visitor) │
-  │                                      │                                │
-  textContent only ◄────────────────────┘                                │
-  (never innerHTML)
 ```
 
 ---
 
 ## Attack Surface Analysis
 
-### 1. Public Key Exposure
+### 1. Public key in page source
 
-**Risk:** The `pk_live_` key is visible in page source to anyone.
+**Risk:** `pk_live_` is visible to anyone who views source.
 
-**Mitigation:** The public key is **not a Personize API key**. It's a site identifier with an HMAC suffix. It cannot:
+**Not a risk.** The public key is a site identifier, not an API key. It cannot:
 - Call the Personize API
-- Read memory or contact data
+- Read contact data
 - Write to any collection
-- Access other sites' content
 
-The HMAC suffix is derived from the Personize secret key (`HMAC-SHA256(sk_live_, 'gs:live:site-slug')`). The Edge API validates it by re-deriving the HMAC. Forging a key without the secret key is computationally infeasible.
+It's derived from the secret key via HMAC — forging one without the secret key is infeasible.
 
-**What an attacker CAN do with a stolen pk_live_:**
-- Open SSE connections → get generic location-based text (same as visiting the page)
-- Send fake events → noise data, no damage (memorize() is append-only)
-- Consume rate limit quota → mitigated by per-key rate limiting
+**What an attacker can do with it:** Open SSE connections → get generic location text (same as visiting the page). Consume rate limit quota (mitigated by per-key rate limiting).
 
-**Severity:** Low. Same risk profile as a Stripe publishable key.
+### 2. XSS via zone content
 
----
+**Eliminated.** gs.js uses `textContent` — never `innerHTML`. Even if the AI generates `<script>alert('xss')</script>`, it renders as literal visible text. No code path sets innerHTML.
 
-### 2. XSS via Zone Content
+### 3. Auth session spoofing
 
-**Risk:** Could AI-generated text contain malicious scripts?
+**Risk:** Someone modifies `window.__GS_USER__` in devtools to see another contact's content.
 
-**Mitigation:** gs.js uses `textContent` — **never** `innerHTML`. This is a fundamental design decision, not an afterthought.
+**What's exposed:** Marketing copy (headlines, CTAs). NOT raw CRM data, emails, or contact properties.
 
-```javascript
-// What gs.js does:
-zone.el.textContent = text;    // ← plain text, cannot execute scripts
+**Mitigation:** For SaaS apps, inject `__GS_USER__` server-side from a validated session, not from client state.
 
-// What gs.js NEVER does:
-zone.el.innerHTML = text;      // ← NEVER. Would allow <script> injection.
-```
+### 4. Collection:property names visible in HTML
 
-Even if the LLM generates `<script>alert('xss')</script>`, it renders as literal visible text, not executable code. There is no code path in gs.js that sets innerHTML.
+**Not a risk.** `data-gs-zone="website_zones:hero_headline"` is visible in source. Knowing the collection name doesn't grant access to any data. It's like seeing a CSS class name.
 
-**Severity:** None. Architecturally eliminated.
+### 5. Memorize endpoint abuse
 
----
+**Mitigated:**
+- Requires an identified visitor (email must be present)
+- Rate limited (max 20 writes per request, per-key rate limits)
+- Sensitive fields auto-redacted (`password`, `ssn`, `credit_card`, `cvv`, `secret`, `token`)
+- Target must be `collection:property` format
 
-### 3. Auth Session Spoofing (Path 1)
+### 6. SSE response interception
 
-**Risk:** `window.__GS_USER__` is set client-side. A user could modify it in devtools to impersonate another contact.
+**Not a risk.** Each SSE connection is scoped to one visitor. HTTPS in production. No way to see another visitor's stream.
 
-**Attack:**
-```javascript
-// Attacker opens devtools and types:
-window.__GS_USER__ = { email: 'ceo@target.com' };
-// Then refreshes → sees CEO's personalized content?
-```
+### 7. CORS open to all origins
 
-**What happens:**
-- The Edge API receives the spoofed email
-- It calls `smartDigest('ceo@target.com')` → gets their profile from Personize memory
-- It generates personalized text based on that profile
-- The attacker sees zone text written for the CEO
+**By design.** gs.js runs on customers' websites (any domain). Same model as HubSpot, Intercom, Google Analytics.
 
-**What's exposed:** Only the generated **text content** (headlines, CTAs, proof points). NOT:
-- Raw CRM data
-- Email addresses or PII
-- Contact properties
-- Memory records
-- Conversation history
+### 8. Secret key leak
 
-**What to do about it:**
-- For SaaS apps: the auth session should be **server-validated** — inject `__GS_USER__` from a server-side session, not from client-side state
-- For marketing sites: this path is typically not used (use unique URLs or tokens instead)
-- The text shown is marketing copy, not sensitive data — the risk is "seeing someone else's headline," not data breach
+**Critical.** If `sk_live_` is exposed, it grants full Personize API access. The entire security model depends on this key staying server-side.
 
-**Severity:** Low-Medium. The attack yields marketing copy, not sensitive data. Server-side session validation eliminates it entirely.
-
----
-
-### 4. URL Token Security (Path 3)
-
-**Risk:** Could someone decrypt or forge a `?gs=` token?
-
-**Mitigation:** Tokens use **AES-256-GCM** encryption:
-- 256-bit key (from `GS_TOKEN_SECRET`)
-- 12-byte random IV per token (no IV reuse)
-- 16-byte authentication tag (tamper detection)
-- Tokens expire after 90 days (configurable)
-
-```
-Token format: base64url( IV[12] + AuthTag[16] + Ciphertext )
-Payload:      { email, campaignId?, createdAt }
-```
-
-**Attacks and outcomes:**
-| Attack | Result |
-|---|---|
-| Brute-force the key | 2^256 keyspace → infeasible |
-| Modify ciphertext | GCM auth tag verification fails → `null` returned |
-| Replay an old token | Expiry check (90 days default) → `null` if expired |
-| Guess a token | Random IV + encryption → no pattern to exploit |
-
-**Severity:** None with a properly generated secret. Use `generateTokenSecret()` to create one.
-
----
-
-### 5. Unique URL Guessing (Path 2)
-
-**Risk:** Could someone guess `/for/sarah-chen-acme` and see Sarah's page?
-
-**Yes — by design.** The slug is derived from the contact's name and company. It's not a secret. The content at that URL is a personalized landing page — it's marketing copy intended for that person.
-
-**What's exposed:** Personalized headlines, CTAs, proof points. The same content Sarah sees when she clicks the link.
-
-**What's NOT exposed:** Email address, CRM data, memory records, contact properties.
-
-**If you need slug secrecy:** Append the encrypted token to the unique URL:
-```
-https://yoursite.com/for/sarah-chen-acme?gs=eyJ1c2Vy...
-```
-Now the slug alone isn't enough — the token must also be valid.
-
-**Severity:** Low. The content is marketing copy. Use tokens for sensitive portals.
-
----
-
-### 6. Memorize Endpoint Abuse
-
-**Risk:** Could an attacker use `POST /api/gs/memorize` to write arbitrary data to Personize memory?
-
-**Mitigations built in:**
-
-| Control | How |
-|---|---|
-| **Identity required** | Server rejects if no email. Anonymous visitors can't write. |
-| **Email must be identified** | The email comes from the visitor's identity (auth, token, slug) — not from the POST body alone in production. |
-| **Rate limited** | Max 20 writes per request. Per-key rate limiting (600/min). |
-| **Collection:property format** | Target must be `collection:property` — can't write to arbitrary memory paths. |
-| **Sensitive field redaction** | Properties named password, ssn, credit_card, cvv, secret, token are silently skipped. |
-| **Value size** | Practical limits from Personize API (content size limits on memorize). |
-
-**Remaining risk:** An identified visitor (or someone who has their token) could write garbage data to that contact's properties. This is similar to a user submitting garbage in any form — low risk, append-only memory.
-
-**Additional hardening for production:**
-- Allowlist which collections can be written to from the client (e.g. only `feedback`, `onboarding` — not `contacts` or `deals`)
-- Server-side validation that the email in the memorize request matches the authenticated visitor
-- Rate limit per email, not just per key
-
-**Severity:** Low-Medium. Mitigated by identity requirement and rate limiting.
-
----
-
-### 7. SSE Response Data Exposure
-
-**Risk:** Could someone intercept SSE responses and see other visitors' personalized content?
-
-**No.** Each SSE connection is scoped to one visitor. The Edge API generates content based on the identity resolved from that specific request. There's no way to see another visitor's stream.
-
-**HTTPS:** In production, all connections are over TLS. SSE data cannot be intercepted in transit.
-
-**Severity:** None.
-
----
-
-### 8. CORS
-
-**Current state:** `app.use(cors())` — allows all origins.
-
-**Risk:** Any website can make requests to the Edge API.
-
-**Why this is intentional:** gs.js runs on the customer's website (any domain). The Edge API must accept requests from any origin — same as HubSpot, Intercom, or Google Analytics endpoints.
-
-**What protects it:** The public key validates which site the request belongs to. Rate limiting prevents abuse. The secret key never leaves the server.
-
-**Severity:** None (by design). CORS is open because it needs to be.
-
----
-
-### 9. Sensitive Data in Generated Text
-
-**Risk:** Could the LLM output sensitive data (SSN, credit card numbers) that was stored in Personize memory?
-
-**Mitigations:**
-
-| Layer | Control |
-|---|---|
-| **Governance** | `smartGuidelines()` loads brand rules that include "never output PII, financial data, or health information" |
-| **Prompt rules** | Generation prompts include: "NEVER invent facts not in the context" and "Output ONLY plain text" |
-| **Memory redaction** | Events memorized from the website redact fields: password, ssn, credit_card, cvv, secret, token |
-| **Tier rules** | Anonymous/located tiers: "Use location-based personalization only. Do NOT reference personal details." |
-
-**Remaining risk:** If a user stores sensitive data in Personize memory (e.g. SSN as a contact property) and the LLM includes it in generated zone text, it would be visible in the browser. This is a data governance issue, not a GS vulnerability.
-
-**Recommendation:** Don't store sensitive PII in collections used for website personalization. Use separate collections for sensitive data and don't reference them in zone prompts.
-
-**Severity:** Low. Governed by brand rules and prompt engineering.
-
----
-
-### 10. Cookie Security
-
-**Cookie:** `_gs_uid` — visitor UID for returning visitor identification.
-
-| Attribute | Value | Why |
-|---|---|---|
-| `SameSite` | `Lax` | Prevents CSRF — cookie not sent on cross-site POST |
-| `Secure` | `true` (HTTPS only) | Prevents interception over HTTP |
-| `HttpOnly` | `false` | gs.js needs to read it (JavaScript cookie) |
-| `Max-Age` | 365 days | Returning visitor window |
-| `Path` | `/` | Available site-wide |
-
-**Risk:** The UID is an opaque identifier. If stolen, an attacker could impersonate a returning visitor — but this only affects personalization tier (returning visitor patterns), not data access.
-
-**Severity:** Low. The UID gives no data access.
-
----
-
-### 11. Secret Key Exposure
-
-**The most critical risk.** If `PERSONIZE_SECRET_KEY` is leaked:
-
-| Impact | Severity |
-|---|---|
-| Full Personize API access | Critical |
-| Can read any contact's memory | Critical |
-| Can write to any collection | Critical |
-| Can generate content as anyone | Critical |
-| Can derive valid pk_live_ keys | High |
-
-**Mitigations:**
-- Secret key is server-side only (Edge API `.env`)
-- Never in client-side code, never in gs.js, never in browser
+- Never in client code, never in gs.js, never in the browser
+- Edge API validates but never echoes it
 - `.gitignore` excludes `.env` files
-- Edge API validates but never echoes the key
-
-**If compromised:** Rotate the key in Personize dashboard immediately. All derived pk_live_ keys become invalid (HMAC changes). Generate new site keys.
-
-**Severity:** Critical if leaked. The entire security model depends on this key staying secret.
-
----
-
-## Security Checklist
-
-### Before going live:
-
-- [ ] `PERSONIZE_SECRET_KEY` is in `.env`, not committed to git
-- [ ] `.gitignore` includes `.env`, `.env.local`, `.env.production`
-- [ ] `GS_TOKEN_SECRET` is generated via `generateTokenSecret()` (64 hex chars)
-- [ ] Public keys are generated via `generateSiteKey()` (HMAC-derived)
-- [ ] HTTPS enabled on all production endpoints
-- [ ] Governance rules include "never output PII" guidelines
-- [ ] Sensitive data is in separate collections from website zone collections
-- [ ] Auth session (`__GS_USER__`) is injected server-side, not from client state
-- [ ] Rate limiting is configured appropriately for expected traffic
-- [ ] Memorize endpoint has collection allowlists (if used)
-
-### Ongoing:
-
-- [ ] Monitor rate limit hits for abuse patterns
-- [ ] Rotate `GS_TOKEN_SECRET` periodically (tokens expire, so rotation is safe)
-- [ ] Review governance rules when adding new zones
-- [ ] Audit which collections are referenced in `data-gs-zone` attributes
+- If compromised: rotate in Personize dashboard immediately
 
 ---
 
 ## Summary
 
-| Attack Surface | Severity | Status |
+| Surface | Severity | Status |
 |---|---|---|
-| Public key exposure | Low | By design (site label, not API key) |
-| XSS via zones | None | Eliminated (`textContent` only) |
-| Auth session spoofing | Low-Medium | Mitigate with server-side session |
-| Token forging | None | AES-256-GCM |
-| URL guessing | Low | Marketing copy, not sensitive data |
-| Memorize abuse | Low-Medium | Identity required, rate limited, redacted |
-| SSE interception | None | Per-visitor scoping + HTTPS |
-| CORS | None | Open by design (like analytics scripts) |
-| Sensitive data in output | Low | Governed by brand rules |
-| Cookie theft | Low | Opaque UID, no data access |
-| **Secret key leak** | **Critical** | **Must stay server-side. Rotate if compromised.** |
+| Public key in source | None | Site label, not API key |
+| XSS via zones | None | `textContent` only — eliminated |
+| Auth spoofing | Low | Yields marketing copy, not data |
+| Collection names visible | None | Metadata, not data access |
+| Memorize abuse | Low | Identity required + rate limited |
+| SSE interception | None | Per-visitor + HTTPS |
+| **Secret key leak** | **Critical** | Must stay server-side |
+
+---
+
+## Checklist
+
+- [ ] `pk_live_` key generated via Personize dashboard (HMAC-derived)
+- [ ] `sk_live_` secret key never in client-side code
+- [ ] HTTPS on all production endpoints
+- [ ] Governance rules include "never output PII"
+- [ ] Auth session injected server-side (for SaaS apps)
+- [ ] Sensitive data in separate collections from website zone collections

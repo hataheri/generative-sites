@@ -12,42 +12,21 @@ Powered by [Personize](https://personize.com).
 
 Every visitor to your website sees the exact same words.
 
-Your CRM knows Sarah is a VP of Engineering at a fintech company evaluating your API product. Your analytics knows Marcus from TechCorp has visited your pricing page three times. Your sales team knows Lisa's company just raised a Series B.
+Your CRM knows Sarah is a VP of Engineering at a fintech company. Your analytics knows Marcus has visited your pricing page three times. Your sales team knows Lisa's company just raised a Series B.
 
 But your website? It says **"Welcome to our platform"** to all of them.
-
-Current "personalization" options are either too shallow or too heavy:
-
-| Approach | Limitation |
-|---|---|
-| Merge tags (`Hi {{first_name}}`) | Surface-level. Changes one word. |
-| Audience segments (3-5 buckets) | Too broad. Not personal. |
-| A/B testing | Optimizes for averages, not individuals. |
-| Manual landing page variants | Doesn't scale past 10 pages. |
-| Full-page dynamic rendering | Over-engineered. Breaks design. Kills caching. |
 
 ---
 
 ## The Solution
 
-Generative Sites introduces a simple concept: **zones**.
-
-A zone is a text element on your page whose words change based on who's looking at it. The design stays identical. Only the text adapts.
+**Zones.** A zone is a text element on your page whose words change based on who's looking at it. The design stays identical. Only the text adapts.
 
 ```html
-<!-- Your designer styles the h1. GS replaces the text inside it. -->
 <h1 data-gs-zone="headline">Welcome to our platform</h1>
-
-<!-- Your designer styles the paragraph. GS replaces the text inside it. -->
 <p data-gs-zone="subheadline">We help teams build faster.</p>
-
-<!-- Your designer styles the button. GS replaces the label. -->
-<a href="/demo" class="btn-primary">
-  <span data-gs-zone="cta-text">Book a Demo</span>
-</a>
+<span data-gs-zone="cta-text">Book a Demo</span>
 ```
-
-**What visitors see:**
 
 | Visitor | Headline | CTA |
 |---|---|---|
@@ -59,74 +38,21 @@ One page. One design. Every visitor gets copy that feels written for them.
 
 ---
 
-## How It Works
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                           GENERATIVE SITES                               │
-│               "Personalized content. Your design."                       │
-├──────────────┬──────────────────┬──────────────────┬─────────────────────┤
-│   IDENTIFY   │    REMEMBER      │     GENERATE     │       DELIVER       │
-│              │                  │                  │                     │
-│ Auth session │ Personize        │ Brand guidelines │ TEXT CONTENT into   │
-│ Unique URL   │ memorize()       │ (smartGuidelines)│ zones on YOUR page  │
-│ URL token    │                  │       +          │                     │
-│ Location     │ Every visit      │ Contact memory   │ CMS/code handles:   │
-│ Deanon       │ enriches the     │ (smartDigest)    │  - Layout           │
-│              │ profile          │       +          │  - Design           │
-│              │                  │ prompt()         │  - Images           │
-│              │ CRM data flows   │ → PLAIN TEXT     │  - Responsive       │
-│              │ in and out       │   (not HTML)     │  - Styling          │
-├──────────────┴──────────────────┴──────────────────┴─────────────────────┤
-│                              ADAPTERS                                    │
-│  CRM: HubSpot · Salesforce · Pipedrive · CSV                            │
-│  CMS: Works on ANY — WordPress, Webflow, Shopify, any HTML              │
-│  Deanon: Clearbit · RB2B · Retention.com · 6sense                       │
-│  Edge: Cloudflare Workers · Vercel Edge · Node.js                       │
-└──────────────────────────────────────────────────────────────────────────┘
-```
-
-### Request Flow
-
-```
-Visitor hits page
-  │
-  ├─ gs.js loads (~5kb, async, non-blocking)
-  │
-  ├─ Discovers all data-gs-zone elements in the DOM
-  │
-  ├─ Determines who the visitor is:
-  │    ├─ URL path /for/sarah-chen-acme → known contact, pre-baked content
-  │    ├─ URL has ?gs=encrypted_token  → known contact via email link
-  │    ├─ window.__GS_USER__ set       → logged-in SaaS user
-  │    └─ None of above               → location-based personalization
-  │
-  ├─ Opens SSE connection to edge API
-  │    ├─ Pre-baked content? → served instantly (<10ms)
-  │    └─ No cache?         → generates in real-time, streams zone-by-zone
-  │
-  ├─ Replaces textContent in each zone (no innerHTML — zero XSS risk)
-  │
-  └─ Tracks engagement → feeds back into Personize memory for next visit
-```
-
----
-
 ## Quick Start
 
-### 2-Minute Setup (Any Website)
+### Step 1: Get your site key
 
-**Step 1.** Add the script tag to your page:
+In the Personize dashboard → Generative Sites → Create Site → copy the script tag.
+
+### Step 2: Add the script tag to your website
 
 ```html
-<script
-  src="https://cdn.personize.com/gs.js"
-  data-key="pk_live_YOUR_KEY"
-  async
-></script>
+<script src="https://gs.personize.ai/gs.js" data-key="pk_live_YOUR_KEY" async></script>
 ```
 
-**Step 2.** Add `data-gs-zone` to any text element:
+Works on any CMS — WordPress, Webflow, Shopify, Squarespace, Next.js, plain HTML. See [CMS installation guides](docs/cms-guides.md).
+
+### Step 3: Add zones to your text elements
 
 ```html
 <h1 data-gs-zone="headline">Welcome to our platform</h1>
@@ -134,530 +60,382 @@ Visitor hits page
 <span data-gs-zone="cta-text">Get Started</span>
 ```
 
-**That's it.** Visitors will see location-personalized text immediately. No npm, no build step, no config files. Works on WordPress, Webflow, Shopify, Squarespace, plain HTML — anything.
-
-### Full Stack Setup (30 Minutes)
-
-```bash
-npm install @generative-sites/core
-
-# Optional adapters
-npm install @generative-sites/crm-hubspot     # CRM sync
-npm install @generative-sites/identify-clearbit # B2B deanon
-```
-
-Configure your zones, connect your CRM, set up bake pipelines, generate campaign URLs. See [Architecture](#architecture) below.
+**That's it.** Visitors see location-personalized text immediately. No npm, no build step, no config files.
 
 ---
 
-## Three Identification Paths
+## Two Types of Zones
 
-Generative Sites identifies visitors through three deterministic paths — each gives **100% confidence** identification with zero vendor cost.
+### Property zones — instant, from Personize memory
 
-### Path 1: Unique URL
-
-Generate a personal URL for each contact and send it via email, LinkedIn, or sales outreach.
-
-```
-https://yoursite.com/for/sarah-chen-acme
+```html
+<h1 data-gs-zone="website_zones:hero_headline">Default headline</h1>
 ```
 
-The page design is identical for everyone. Only the zone text changes. Sarah sees copy written specifically for her. Marcus gets his own version at `/for/marcus-rivera-techcorp`.
+Format: `collectionName:propertyName`. Reads directly from a contact's Personize record. Content populated by your agents, pipelines, Zapier zaps, or MCP tools. **No LLM at serve time. Instant. Deterministic.**
 
-**Best for:** ABM campaigns, outbound sales, personalized proposals.
+### Generative zones — AI-written at serve time
 
-### Path 2: URL Token
-
-Append an encrypted token to any existing page URL. Works with every email tool and CRM.
-
-```
-https://yoursite.com/pricing?gs=eyJ1c2VyIjoic2FyYWh...
+```html
+<h1 data-gs-zone="headline">Default headline</h1>
 ```
 
-The token decrypts to `{ email, campaignId, createdAt }` using AES-256-GCM. No database lookup, no third-party call — pure edge-side decryption.
+Format: just a name (no colon). AI generates text using the visitor's context — location, company, profile, brand guidelines. Takes 2-5 seconds.
 
-**Best for:** Email campaigns, nurture sequences, retargeting links.
+### Mix both on the same page
 
-### Path 3: Auth Session
+```html
+<!-- From Personize memory — instant -->
+<h1 data-gs-zone="website_zones:hero_headline">Welcome</h1>
+<p data-gs-zone="website_zones:sub_headline">Built for teams</p>
 
-For logged-in SaaS applications — inject the user identity before gs.js loads.
+<!-- AI-generated — uses visitor context -->
+<span data-gs-zone="cta-text">Get Started</span>
+<p data-gs-zone="proof">Trusted by 500+ companies</p>
+```
+
+Property zones cost zero. Generative zones cost one `prompt()` call total (all batched).
+
+---
+
+## How Visitors Get Identified
+
+### For websites (no auth): `data-gs-identify`
+
+The HTML tag itself declares how to find the visitor's record:
+
+```html
+<h1 data-gs-zone="website_zones:hero_headline"
+    data-gs-identify="website_zones:slug">Welcome</h1>
+```
+
+`data-gs-identify="collection:property"` tells the Edge API: search this collection for a record where this property matches the URL value.
+
+| URL | What gs.js sends | Edge API does |
+|---|---|---|
+| `/for/sarah-chen` | `identify_value=sarah-chen` | Searches `website_zones` where `slug = sarah-chen` |
+| `?email=sarah@acme.com` | `identify_value=sarah@acme.com` | Searches `website_zones` where `email = sarah@acme.com` |
+| `?customer_id=ACME-2024` | `identify_value=ACME-2024` | Searches collection where `customer_id = ACME-2024` |
+| (no URL param) | (no value) | Edge API uses visitor's location from geo headers |
+
+One search → full record → all property zones served from it.
+
+### For web apps (with auth): `window.__GS_USER__`
 
 ```tsx
-// In your layout or _app
 <script dangerouslySetInnerHTML={{
   __html: `window.__GS_USER__ = ${JSON.stringify({
     email: user.email,
     firstName: user.firstName,
     company: user.company,
-    plan: user.plan,
   })};`
 }} />
+<script src="https://gs.personize.ai/gs.js" data-key="pk_live_..." async></script>
+
+<h1 data-gs-zone="dashboard:greeting">Welcome back</h1>
+<p data-gs-zone="dashboard:insight">Your usage summary</p>
 ```
 
-**Best for:** In-app personalization, SaaS dashboards, logged-in experiences.
+The server injects the user identity. No `data-gs-identify` needed — the auth session provides the email.
 
-### Fallback: Location
+### For web apps with property zones: auth + identify (fastest)
 
-When no identity path matches, gs.js falls back to location-based personalization using free edge headers (Cloudflare, Vercel). Every visitor still gets relevant copy — just at a broader level.
+```html
+<h1 data-gs-zone="dashboard:greeting"
+    data-gs-identify="dashboard:email">Welcome back</h1>
+```
+
+Auth provides the email. `data-gs-identify` tells the Edge API to load the entire record in one call. All `dashboard:*` zones served instantly.
+
+### Location (automatic, always works)
+
+For anonymous visitors with no URL params and no auth. The Edge API reads the visitor's city/region/country from edge headers and either:
+- Generates location-aware text (generative zones)
+- Looks up location records (with `data-gs-identify="locations:location"`)
+
+No setup required. Works for 100% of visitors.
+
+---
+
+## How Content Gets Into Personize
+
+Generative Sites **reads** content from Personize. Personize agents, pipelines, and integrations **write** it. You likely already have content flowing in:
+
+| Method | Example |
+|---|---|
+| **Personize Pipeline** (Trigger.dev) | CRM sync pipeline stores contact properties |
+| **AI Agent** (MCP, Claude, GPT) | Agent generates meeting summary, stores in memory |
+| **Zapier / n8n** | Zap triggers on deal stage change, writes updated messaging |
+| **Personize SDK** | `memorize({ email, collection, content, enhanced: true })` |
+| **Manual** | Edit contact properties in Personize dashboard |
+| **CSV import** | Upload spreadsheet with email + property values |
+
+The website zone just reads whatever's stored:
 
 ```
-Austin, TX visitor     → "Trusted by 14 companies in Austin"
-London, UK visitor     → "Free shipping across the UK"
-EU visitor             → "GDPR-compliant by design"
+Personize memory:
+  sarah@acme.com → website_zones.hero_headline = "How Acme Scaled API Ops by 3x"
+
+Website:
+  <h1 data-gs-zone="website_zones:hero_headline">Welcome</h1>
+  → Shows: "How Acme Scaled API Ops by 3x"
 ```
 
 ---
 
-## Two Delivery Modes
+## Custom Prompts for Generative Zones
 
-### Bake (Pre-Generated, Instant)
+Control what the AI writes with `data-gs-prompt`:
 
-For known contacts — ABM targets, CRM contacts, campaign recipients.
-
-A pipeline generates personalized text for each contact ahead of time and stores it in edge KV. When they visit, content loads in **under 10ms**. No LLM call at serve time.
-
-```typescript
-const result = await bakeCampaign(contacts, {
-  campaignId: 'q2-abm-enterprise',
-  siteId: 'marketing-site',
-  baseUrl: 'https://yoursite.com',
-  zones: [
-    { id: 'headline' },
-    { id: 'subheadline' },
-    { id: 'proof', prompt: 'Write social proof relevant to their industry.' },
-    { id: 'cta-text', prompt: 'Write a CTA with their first name. Max 5 words.' },
-  ],
-});
+```html
+<p data-gs-zone="proof"
+   data-gs-prompt="Write social proof mentioning our 99.9% uptime SLA. Max 2 sentences.">
+  Trusted by 500+ companies
+</p>
 ```
 
-### Stream (Real-Time, On-Demand)
+The prompt is combined with:
+- **Brand guidelines** — loaded automatically from your Personize governance rules
+- **Visitor context** — loaded automatically via `smartDigest()` (name, company, history)
+- **Location** — city/region/country from edge headers
+- **UTM parameters** — forwarded from the URL for campaign-aware copy
 
-For unknown visitors and real-time adaptation. gs.js opens an SSE connection, the server assembles context (brand guidelines + visitor memory + location), generates text, and streams it zone-by-zone.
-
-Typical latency: 2-5 seconds for first render, then cached for subsequent visits.
+Without `data-gs-prompt`, the AI uses sensible defaults based on the zone name.
 
 ---
 
-## Property Zones — Deterministic, Zero-LLM Content
+## Capture Visitor Input (Memorize)
 
-For baked/pre-generated personalization, Generative Sites supports a special zone syntax that pulls content directly from Personize memory properties — **no LLM call at any point**.
-
-### The Syntax
+Write visitor input back to Personize memory. Off by default, opt-in per element:
 
 ```html
-<!-- Property zone: reads from a Personize collection property -->
-<h1 data-gs-zone="website_zones:hero_headline">Default headline</h1>
+<!-- Single field -->
+<textarea
+  data-gs-memorize="feedback:feature_request"
+  data-gs-trigger="blur"
+  placeholder="What feature would help you most?"
+></textarea>
 
-<!-- Generative zone: AI-written at serve/bake time -->
-<p data-gs-zone="proof">Default proof statement</p>
+<!-- Form -->
+<form data-gs-memorize-form="onboarding">
+  <input data-gs-memorize="onboarding:primary_goal" placeholder="Your main goal" />
+  <select data-gs-memorize="onboarding:team_size" data-gs-trigger="change">
+    <option>1-10</option>
+    <option>11-50</option>
+  </select>
+  <button type="submit">Save</button>
+</form>
 ```
 
-The colon separates the **collection system name** from the **property system name**. The value is looked up directly in the contact's Personize record.
+Or via JavaScript:
 
-### Why This Matters
-
-| | Generative Zone | Property Zone |
-|---|---|---|
-| Content source | LLM generates at serve/bake time | Pre-stored in Personize memory |
-| Latency | 2-5s (stream) or pre-baked | Instant (memory lookup) |
-| LLM cost | ~1 prompt() call per page | Zero |
-| Determinism | AI-generated, varies | Exact stored value, deterministic |
-| Best for | Dynamic copy, location-aware text | High-confidence, curated content |
-
-### Setting Up Property Zones
-
-1. **Create a collection** in Personize called `website_zones` (or any name)
-2. **Add properties** with detailed descriptions and examples:
-
-| Property | System Name | Type | Example Value |
-|---|---|---|---|
-| Hero Headline | `hero_headline` | Text | "How Acme scaled API ops by 3x" |
-| Sub Headline | `sub_headline` | Text | "The platform built for API-first teams" |
-| CTA Text | `cta_text` | Text | "See Sarah's custom demo" |
-
-3. **Populate via pipeline** — CRM sync, enrichment pipeline, or batch import
-4. **Reference in HTML** — `data-gs-zone="website_zones:hero_headline"`
-
-The richer your property descriptions and examples, the better Personize's AI extraction populates them. See [docs/property-zones.md](docs/property-zones.md) for the full setup guide.
-
-### Mixing Both Types
-
-You can mix property zones and generative zones on the same page. They resolve in parallel:
-
-```html
-<!-- Property zone: instant, from memory -->
-<h1 data-gs-zone="website_zones:hero_headline">Default headline</h1>
-
-<!-- Property zone: instant, from memory -->
-<p data-gs-zone="website_zones:sub_headline">Default subheadline</p>
-
-<!-- Generative zone: AI-written, uses contact context -->
-<span data-gs-zone="cta-text">Book a Demo</span>
-
-<!-- Generative zone: AI-written, uses industry context -->
-<p data-gs-zone="proof">Trusted by 500+ companies</p>
+```javascript
+GS.memorize('feedback:feature_request', 'Need better batch processing');
 ```
 
-**Cost model:** A page with 4 property zones and 2 generative zones costs **1 LLM call** total — not 6. Property zones are free.
+Requires an identified visitor. Anonymous writes are silently dropped.
+
+---
+
+## JavaScript API
+
+```javascript
+// Identify a visitor (after login or form fill)
+GS.identify('sarah@acme.com', { firstName: 'Sarah', company: 'Acme Corp' });
+
+// Track events (improves future AI generation)
+GS.track('feature_used', { feature: 'batch-api' });
+
+// Write to Personize memory
+GS.memorize('feedback:feature_request', 'Need batch processing');
+
+// Re-render zones
+GS.refresh();             // all zones
+GS.refresh('headline');   // one zone
+
+// Callbacks
+GS.on('zone:render', function(d) { console.log(d.zone, d.text); });
+GS.on('meta', function(d) { console.log(d.tier, d.location); });
+GS.on('memorize', function(d) { console.log(d.target, d.value); });
+
+// Debug
+console.log(GS.debug());
+```
 
 ---
 
 ## Progressive Personalization Tiers
 
-Personalization quality scales with data. Every visitor gets the best experience possible given what you know about them.
+| Tier | Data Available | Example Output |
+|---|---|---|
+| **Anonymous** | None | "Welcome to our platform" (fallback stays) |
+| **Located** | City, region, country | "Trusted by teams across Texas" |
+| **Account** | Company, industry | "Built for fintech compliance requirements" |
+| **Known** | Name, role, company, history | "Sarah, Acme's API costs — cut by 40%" |
 
-### Tier: Anonymous
-
-**Data:** None.
-**Personalization:** Show original fallback text.
-
-```
-headline: "Welcome to our platform"
-```
-
-### Tier: Located
-
-**Data:** City, region, country (from free edge headers).
-**Personalization:** Location-aware copy.
-
-```
-headline: "Trusted by teams across Texas"
-proof:    "14 companies in Austin use our platform"
-```
-
-### Tier: Account
-
-**Data:** Company, industry, size (from deanon or CRM match).
-**Personalization:** Industry and company-level messaging.
-
-```
-headline: "Built for fintech compliance requirements"
-cta-text: "See enterprise pricing"
-```
-
-### Tier: Known
-
-**Data:** Full contact profile — name, role, company, deal stage, engagement history.
-**Personalization:** Individually tailored copy.
-
-```
-headline: "Sarah, Acme Corp's API costs — cut by 40%"
-cta-text: "Sarah, talk to Alex →"
-proof:    "Dell's Austin team went live in 3 weeks"
-```
-
-### Tiers Upgrade Mid-Session
-
-```
-Visit starts → Located (Austin, TX)
-  ↓
-B2B deanon resolves → Account (Dell, hardware)
-  Zones update with industry context
-  ↓
-Visitor fills form → Known (sarah@dell.com, CRM match)
-  All zones update with full personalization
-  ↓
-Next visit → Known from first page load (baked content ready)
-```
+Every visitor gets the best experience possible given what you know. As more data flows into Personize, personalization improves automatically.
 
 ---
 
 ## CMS Compatibility
 
-Because GS delivers **text only** (not HTML layouts), CMS compatibility is a non-issue. The `data-gs-zone` attribute works on any HTML element, on any CMS, behind any CDN, with any caching layer.
+gs.js is a client-side script — like HubSpot, Intercom, or Google Analytics. Works behind any cache, any CDN, any CMS.
 
-**Why caching doesn't matter:** gs.js runs client-side after the cached page loads — just like HubSpot, Intercom, or Google Analytics. The CMS caches the page with fallback text in zones. gs.js replaces text after load.
-
-| CMS | Setup Time | How |
-|---|---|---|
-| **Any HTML** | 30 seconds | Paste script tag, add attributes |
-| **WordPress** | 2 minutes | Script in theme head, zones in content |
-| **Webflow** | 2 minutes | Script in custom code, zones via custom attributes |
-| **Shopify** | 2 minutes | Script in theme.liquid, zones in sections |
-| **Squarespace** | 2 minutes | Script in code injection, zones in blocks |
-| **Wix** | 2 minutes | Script in custom code, zones in elements |
-| **Next.js** | npm install | `@generative-sites/next` package with `<Zone>` component |
-| **React / Vue** | npm install | Framework-native components |
-
-### WordPress Example
-
-No plugin required. Add the script in Appearance → Theme Editor → header.php:
-
-```html
-<script src="https://cdn.personize.com/gs.js" data-key="pk_live_..." async></script>
-```
-
-Then in any page or post, switch to the HTML editor:
-
-```html
-<h1 data-gs-zone="headline">Welcome to our law firm</h1>
-<p data-gs-zone="service-area">Serving clients nationwide</p>
-```
-
-### Webflow Example
-
-Site Settings → Custom Code → Footer Code:
-
-```html
-<script src="https://cdn.personize.com/gs.js" data-key="pk_live_..." async></script>
-```
-
-On any text element, add a custom attribute:
-- Name: `data-gs-zone`
-- Value: `headline`
-
----
-
-## Campaign URL Generation
-
-Generate unique URLs and encrypted tokens for your entire ABM list, then import them into any CRM or email tool.
-
-```typescript
-import { bakeCampaign, campaignToCSV } from '@generative-sites/bake';
-
-const result = await bakeCampaign(contacts, {
-  campaignId: 'q2-abm-enterprise',
-  siteId: 'marketing-site',
-  baseUrl: 'https://yoursite.com',
-  zones: [
-    { id: 'website_zones:hero_headline' },  // property zone — no LLM
-    { id: 'website_zones:sub_headline' },   // property zone — no LLM
-    { id: 'proof', prompt: 'Industry-specific social proof.' },
-    { id: 'cta-text', prompt: 'CTA with their first name.' },
-  ],
-});
-
-// Export CSV for CRM import
-console.log(campaignToCSV(result));
-// email,unique_url,token,slug
-// sarah@acme.com,https://yoursite.com/for/sarah-chen-acme,eyJ1c2...,sarah-chen-acme
-```
-
-### CRM Integration
-
-Store unique URLs and tokens as CRM contact properties, then use them in email templates:
-
-**HubSpot:**
-```
-Custom property: gs_personalized_url
-Email template:  <a href="{{contact.gs_personalized_url}}">See your personalized page</a>
-
-Custom property: gs_token
-Any link:        <a href="https://yoursite.com/pricing?gs={{contact.gs_token}}">View pricing</a>
-```
-
-**Salesforce / Outreach / Salesloft:** Same pattern — custom fields and merge variables.
-
-### Bi-Directional Sync
-
-```
-CRM → Personize:   Contacts, companies, deal data (nightly + webhook)
-Personize → CRM:   Engagement scores, pages visited, zones shown
-```
-
----
-
-## Memory Loop
-
-Every visit makes the next one smarter. Generative Sites feeds engagement data back into Personize memory as human-readable narratives — not raw JSON.
-
-```
-Visit 1: Location + pages viewed
-Visit 2: + returning visitor patterns + content interests
-Visit 3: + form data + download signals + intent scoring
-Visit 4: + CRM match + full profile + deal context
-Visit 5: + zone engagement feedback (what messaging resonated)
-Visit N: AI has a rich, multi-session narrative → smartDigest() returns the full picture
-```
-
-### What Gets Memorized
-
-| Signal | Stored As |
+| CMS | Setup |
 |---|---|
-| Page views | Narrative: "Visited /pricing and /enterprise on March 14" |
-| Zone impressions | "Saw headline: 'Built for fintech teams' (tier: located)" |
-| Zone engagement | "Spent 12s reading the proof zone, scrolled to CTA" |
-| Form submissions | "Submitted demo request form with email sarah@acme.com" |
-| Downloads | "Downloaded 'API Security Whitepaper'" |
-| Identify events | "Identified as sarah@acme.com with traits: VP Engineering, Pro plan" |
+| **Any HTML** | Paste script tag, add `data-gs-zone` attributes |
+| **WordPress** | Script in theme header, zones via block editor or Elementor |
+| **Webflow** | Script in custom code, zones via custom attributes |
+| **Shopify** | Script in theme.liquid, zones in section templates |
+| **Squarespace** | Script in code injection, zones in code blocks |
+| **Next.js / React** | Script in layout, `data-gs-zone` in JSX |
 
-Sensitive fields (`password`, `ssn`, `credit_card`, `cvv`, `secret`, `token`) are automatically redacted.
+**Can't add attributes in your editor?** Use the CSS selector approach:
+
+```html
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelector('h1').setAttribute('data-gs-zone', 'website_zones:hero_headline');
+  document.querySelector('.subtitle').setAttribute('data-gs-zone', 'website_zones:sub_headline');
+});
+</script>
+```
+
+See [docs/cms-guides.md](docs/cms-guides.md) for step-by-step instructions per platform.
+
+---
+
+## Use Cases
+
+### B2B SaaS — ABM landing page
+
+```html
+<h1 data-gs-zone="website_zones:hero_headline"
+    data-gs-identify="website_zones:slug">See how we can help</h1>
+<p data-gs-zone="website_zones:sub_headline">The modern platform for teams</p>
+<span data-gs-zone="cta-text" data-gs-prompt="CTA with their name, 5 words max">Book a Demo</span>
+```
+
+Send `/for/sarah-chen` in your email. Sarah sees copy written for her.
+
+### SaaS dashboard — logged-in personalization
+
+```html
+<h1 data-gs-zone="dashboard:greeting">Welcome back</h1>
+<p data-gs-zone="dashboard:insight" data-gs-prompt="Usage insight with specific numbers">Your summary</p>
+```
+
+Sarah sees: "Sarah, your API usage grew 40% this week."
+
+### Local services — location-aware
+
+```html
+<h1 data-gs-zone="headline">Welcome</h1>
+<p data-gs-zone="proof" data-gs-prompt="Social proof mentioning the visitor's city">Trusted by companies worldwide</p>
+```
+
+Austin visitor sees: "Trusted by 14 companies in Austin."
+
+### Client portal — show meeting notes
+
+```html
+<div data-gs-zone="client_portal:meeting_summary"
+     data-gs-identify="client_portal:email">Meeting notes</div>
+<p data-gs-zone="client_portal:next_steps">Next steps</p>
+```
+
+Content populated by your AI agent after the meeting. Shown instantly.
 
 ---
 
 ## Governance & Guardrails
 
-Every piece of generated text is governed by your brand rules via Personize's `smartGuidelines()`. Set them once, they apply everywhere.
-
 | Guardrail | What It Prevents |
 |---|---|
-| **Brand voice** | Off-tone copy that doesn't sound like you |
-| **Approved claims** | Hallucinated stats, fake case studies, invented quotes |
-| **Prohibited content** | Competitor mentions, specific ROI promises, legal claims |
-| **Compliance rules** | Missing GDPR notices for EU visitors, HIPAA disclaimers |
-| **Tier-appropriate tone** | Creepy personalization for visitors you shouldn't know about |
-| **Fallback safety** | Broken pages — if anything fails, original text stays |
+| **Brand voice** | Off-tone copy |
+| **Approved claims** | Hallucinated stats and fake quotes |
+| **Prohibited content** | Competitor mentions, specific ROI promises |
+| **Tier-appropriate tone** | Creepy personalization at wrong tier |
+| **XSS prevention** | `textContent` only — generated text can't execute code |
+| **Fallback safety** | If anything fails, original text stays |
 
-### XSS Prevention
-
-gs.js uses `textContent` — never `innerHTML`. Generated content **cannot** execute scripts or inject markup. This is a fundamental design decision, not an afterthought.
-
-### SEO
-
-Fallback text IS the SEO content. Google indexes the default. Personalized text is for human visitors. This is the correct behavior — no cloaking, no duplicate content issues.
+Configure brand rules in the Personize dashboard → Governance. They apply to all zone generation automatically.
 
 ---
 
-## Use Cases by Vertical
+## Memory Loop
 
-### B2B SaaS
+Every visit makes the next one smarter. gs.js automatically memorizes engagement:
 
-| Use Case | Zones | ID Path |
-|---|---|---|
-| ABM landing pages | headline, proof, cta | Unique URL |
-| Pricing page | headline, proof, cta | URL token or deanon |
-| In-app dashboard | insight, recommendation, tip | Auth session |
-| Blog sidebar | related-content, cta | Deanon + behavioral |
+| Signal | Stored As |
+|---|---|
+| Page views | "Visited /pricing and /enterprise on March 14" |
+| Zone impressions | "Saw headline: 'Built for fintech teams' (tier: located)" |
+| Form submissions | "Submitted demo request form with email sarah@acme.com" |
+| Identify events | "Identified as sarah@acme.com: VP Engineering, Pro plan" |
+| Custom events | Whatever you send via `GS.track()` |
 
-**Example:** Sarah is a Pro plan user with 14K API calls/month (up from 8K). When she logs into the dashboard:
-
-```
-zone: "dashboard-greeting"  → "Sarah, your API usage grew 40% this week"
-zone: "usage-insight"       → "3 teammates haven't tried batch endpoints yet — share this guide?"
-zone: "recommendation"      → "Teams your size typically upgrade to Enterprise for SSO and audit logs"
-```
-
-### E-Commerce (B2C)
-
-| Use Case | Zones | ID Path |
-|---|---|---|
-| Homepage hero | headline, subheadline | Location + Retention.com |
-| Product page | testimonial, proof | Location |
-| Cart urgency | cta, shipping-note | Cookie (returning) |
-| Win-back landing | headline, offer, cta | Unique URL |
-
-**Example:** A visitor from Miami sees:
-
-```
-zone: "headline"     → "Same-day delivery in Miami"
-zone: "proof"        → "4,200+ orders delivered in South Florida this month"
-zone: "shipping"     → "Order by 2pm for delivery today"
-```
-
-### Local Services
-
-| Use Case | Zones | ID Path |
-|---|---|---|
-| Service area text | headline, service-area | Location (free) |
-| Testimonials | testimonial | Location |
-| Campaign pages | headline, proof, cta | Unique URL |
-
-**Example:** A Houston visitor to a law firm's website:
-
-```
-zone: "headline"     → "Serving greater Houston since 2005"
-zone: "service-area" → "Offices in downtown Houston and The Woodlands"
-zone: "testimonial"  → "Best employment lawyer in Harris County — saved our company"
-```
-
-### Agencies & Consultants
-
-Offer **"We'll make your website generative"** as a service. One page template per client. Unique URLs for their ABM targets. No ongoing landing page creation.
+Sensitive fields (`password`, `ssn`, `credit_card`, `cvv`) are automatically redacted.
 
 ---
 
-## Architecture
-
-### Repository Structure
+## How It Works Under the Hood
 
 ```
-generative-sites/
-├── packages/
-│   └── core/                    # Shared types, config, token, slug
-│       └── src/
-│           ├── types.ts         # VisitorIdentity, ZoneConfig, PropertyZoneRef
-│           ├── config.ts        # defineConfig()
-│           ├── token.ts         # AES-256-GCM token encryption
-│           └── slug.ts          # URL-safe slug generation
-│
-├── server/                      # Edge API server
-│   └── src/
-│       ├── routes/
-│       │   ├── stream.ts        # GET /api/gs/stream — SSE endpoint
-│       │   ├── event.ts         # POST /api/gs/event — event ingestion
-│       │   └── identify.ts      # POST /api/gs/identify — explicit ID
-│       └── lib/
-│           ├── identity.ts      # Visitor identification (3 paths)
-│           ├── generate.ts      # Zone text generation via Personize
-│           ├── property-zone.ts # Property zone resolution (no LLM)
-│           └── memorize.ts      # Narrative memorization
-│
-├── pipelines/
-│   └── bake/                    # Pre-generation pipeline
-│       └── src/
-│           ├── bake-contact.ts  # Single contact bake (property + generative)
-│           ├── bake-campaign.ts # Batch bake + URL generation + CSV export
-│           └── kv.ts            # KV store abstraction
-│
-├── adapters/
-│   └── crm/
-│       └── hubspot/             # HubSpot bi-directional sync
-│
-├── examples/
-│   ├── abm-campaign/           # ABM with unique URLs + property zones
-│   └── nextjs-saas/            # SaaS with auth session
-│
-├── docs/
-│   └── property-zones.md       # Property zone setup guide
-│
-└── spec/
-    └── api-contract.md          # SSE protocol specification
+Browser                          gs.personize.ai (Edge API)           Personize
+───────                          ─────────────────────────            ─────────
+
+gs.js discovers zones
+  reads data-gs-zone
+  reads data-gs-identify
+  reads data-gs-prompt
+  collects UTMs from URL
+  │
+  │  SSE connection
+  ▼
+                                 Validates pk_live_ key (HMAC)
+                                 Resolves identity:
+                                   auth → collection lookup → location
+                                 │
+                                 ├─ Property zones:
+                                 │    record already loaded → instant     ← recall()
+                                 │
+                                 ├─ Generative zones:
+                                 │    smartGuidelines()                   ← brand rules
+                                 │    smartDigest()                       ← contact context
+                                 │    prompt()                            ← AI generation
+                                 │
+  ◄── SSE: zone events ─────────┤
+  replaces textContent           │
+  (never innerHTML)              ├─ memorize() session narrative          ← engagement
+                                 │
+  GS.track() / GS.memorize()    │
+  ──► POST /api/gs/event ───────┤
+  ──► POST /api/gs/memorize ────┤
 ```
 
-### gs.js Client API
+The `pk_live_` key is safe in client-side code — it's a site identifier, not an API key. The actual Personize secret key stays server-side. See [docs/security.md](docs/security.md).
 
-```javascript
-// Identification (for SaaS apps)
-GS.identify('sarah@acme.com', {
-  firstName: 'Sarah',
-  company: 'Acme Corp',
-  plan: 'pro',
-});
+---
 
-// Event tracking (for better personalization)
-GS.track('feature_used', { feature: 'batch-api' });
-GS.track('pricing_viewed', { plan: 'enterprise' });
+## Documentation
 
-// Consent integration
-GS.consent({
-  essential: ['geo'],
-  requireConsent: {
-    analytics: ['tracking', 'zone-impressions'],
-    marketing: ['deanon', 'crm-sync'],
-  },
-  autoDetect: true,  // OneTrust, CookieBot, Osano
-});
+| Guide | What It Covers |
+|---|---|
+| [Get Started](docs/get-started.md) | Step-by-step for every use case |
+| [Zone Reference](docs/zone-reference.md) | Every attribute, every method, every pattern |
+| [CMS Guides](docs/cms-guides.md) | WordPress, Webflow, Shopify, Squarespace, etc. |
+| [Product Flow](docs/product-flow.md) | End-user journey (no IDE needed) |
+| [Security](docs/security.md) | Attack surface analysis |
+| [Property Zones](docs/property-zones.md) | Collection:property setup |
 
-// Zone control
-GS.refresh('headline');     // Re-render a specific zone
-GS.pause();                 // Pause all personalization
-GS.resume();                // Resume
+---
 
-// Callbacks
-GS.on('zone:render', ({ zone, text, tier }) => { ... });
-GS.on('tier:upgrade', ({ newTier, reason }) => { ... });
-
-// Debug
-GS.debug();  // Returns current VisitorIdentity
-```
-
-### SSE Protocol
-
-gs.js communicates with the edge API over Server-Sent Events. The protocol is defined in [spec/api-contract.md](spec/api-contract.md).
+## SSE Protocol
 
 ```
 event: meta
-data: {"tier":"located","location":{"city":"Austin","region":"TX","country":"US"},"uid":"abc123"}
+data: {"tier":"located","location":{"city":"Austin","region":"TX","country":"US"},"uid":"gs_abc123"}
 
 event: zone
 data: {"zone":"headline","text":"Trusted by teams across Texas","tier":"located","mode":"stream"}
@@ -666,140 +444,8 @@ event: zone
 data: {"zone":"cta-text","text":"Get started today","tier":"located","mode":"stream"}
 
 event: done
-data: {"zones":["headline","cta-text"],"duration_ms":1240}
+data: {"zones":["headline","cta-text"],"duration_ms":5200}
 ```
-
----
-
-## Privacy & Consent
-
-**No built-in consent manager.** GS integrates with your existing consent solution and degrades gracefully.
-
-| Consent Level | What Happens |
-|---|---|
-| **No consent** | Show original fallback text. No cookies, no tracking. |
-| **Essential** | Location personalization. First-party cookie. |
-| **Analytics** | + Behavioral tracking + returning visitor detection |
-| **Marketing** | + Deanonymization + CRM sync + full personalization |
-
-Deterministic paths (unique URL, URL token, auth session) represent intentional visits from known contacts — typically covered under legitimate interest or existing CRM consent.
-
----
-
-## Why Content Only?
-
-This is the core design decision that makes everything else work.
-
-GS delivers **plain text strings** — not HTML, not layouts, not components. The LLM writes copy (what it's good at). The designer designs (what they're good at).
-
-| Benefit | Why It Matters |
-|---|---|
-| No CSS conflicts | Text inherits the host site's styling automatically |
-| No responsive issues | The zone container handles responsive — GS just fills in words |
-| No XSS risk | `textContent` only — generated text can't execute code |
-| No CMS conflicts | Client-side text replacement works behind any cache layer |
-| No design QA | Zones look identical to fallback — you're only reviewing copy |
-| 10-50x cheaper | Text tokens vs HTML layout tokens |
-| Works everywhere | Any HTML element, any CMS, any framework |
-
----
-
-## Examples
-
-### ABM Campaign with Property Zones
-
-See [examples/abm-campaign/](examples/abm-campaign/) — a complete ABM campaign using both property zones (from Personize memory) and generative zones (AI-written).
-
-```html
-<!-- Property zones — instant, from memory -->
-<h1 data-gs-zone="website_zones:hero_headline">See how we can help</h1>
-<p data-gs-zone="website_zones:sub_headline">Built for teams who ship fast</p>
-
-<!-- Generative zones — AI-written -->
-<span data-gs-zone="cta-text">Book a Demo</span>
-<p data-gs-zone="proof">Trusted by 500+ companies</p>
-```
-
-### SaaS Dashboard
-
-See [examples/nextjs-saas/](examples/nextjs-saas/) — a Next.js SaaS app with auth session identification.
-
-```tsx
-<h1 data-gs-zone="dashboard-greeting">Welcome back</h1>
-<p data-gs-zone="usage-insight">Here's your usage summary.</p>
-<div data-gs-zone="recommendation">Check out our latest features.</div>
-```
-
----
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Required | Description |
-|---|---|---|
-| `PERSONIZE_SECRET_KEY` | Yes | Personize secret key (server-side only) |
-| `GS_TOKEN_SECRET` | For URL tokens | 256-bit key for AES-256-GCM token encryption |
-
-### Zone Attributes
-
-| Attribute | Required | Description |
-|---|---|---|
-| `data-gs-zone` | Yes | Zone ID (e.g. `headline`) or property reference (`collection:property`) |
-| `data-gs-prompt` | No | Custom generation prompt for this zone |
-| `data-gs-mode` | No | `auto` (default), `bake`, or `stream` |
-
-### Config File (Power Users)
-
-```typescript
-// gs.config.ts
-import { defineConfig } from '@generative-sites/core';
-
-export default defineConfig({
-  personize: { secretKey: process.env.PERSONIZE_SECRET_KEY },
-  zones: {
-    headline: {
-      prompt: 'Hero headline, max 10 words. Industry-specific if known.',
-      mode: 'auto',
-      maxTokens: 50,
-      refreshOn: ['identify'],
-    },
-  },
-  bake: {
-    kvAdapter: 'cloudflare',
-    ttlSeconds: 30 * 24 * 60 * 60,  // 30 days
-  },
-  token: {
-    secret: process.env.GS_TOKEN_SECRET,
-    maxAgeDays: 90,
-  },
-});
-```
-
----
-
-## API Reference
-
-See [spec/api-contract.md](spec/api-contract.md) for the full SSE protocol specification.
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/gs/stream` | GET | SSE stream — zone content delivery |
-| `/api/gs/event` | POST | Batched event ingestion |
-| `/api/gs/identify` | POST | Explicit visitor identification |
-
----
-
-## Roadmap
-
-- [ ] Deanonymization adapters (Clearbit, RB2B, Retention.com)
-- [ ] Mid-session tier upgrades with zone re-rendering
-- [ ] Consent bridge (OneTrust, CookieBot auto-detection)
-- [ ] React / Next.js / Vue packages with native components
-- [ ] Preview mode (`?gs_preview=email@company.com`)
-- [ ] A/B testing (personalized vs fallback conversion tracking)
-- [ ] Self-host (Docker + Cloudflare Worker)
-- [ ] Analytics dashboard (zone render rates, latency, engagement)
 
 ---
 

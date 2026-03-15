@@ -192,15 +192,38 @@ https://yoursite.com/pricing?gs=eyJ1c2VyIjoic2FyYWh...
 
 The token decrypts server-side to `{ email, campaignId }`. All zones get personalized.
 
+### Auth + identify combo (web apps with property zones)
+
+For web apps that use both auth AND property zones — this is the fastest pattern:
+
+```html
+<script>window.__GS_USER__ = { email: 'sarah@acme.com' };</script>
+<script src="https://gs.personize.ai/gs.js" data-key="pk_live_..." async></script>
+
+<h1 data-gs-zone="dashboard:greeting"
+    data-gs-identify="dashboard:email">Welcome back</h1>
+<p data-gs-zone="dashboard:insight">Your summary</p>
+<div data-gs-zone="dashboard:recommendation">Features</div>
+```
+
+Auth provides the email. `data-gs-identify="dashboard:email"` tells the Edge API to use that email to load the entire `dashboard` collection record in one call. All `dashboard:*` property zones are served from that single result.
+
+Without `data-gs-identify`, auth-only mode does a separate recall per property zone (slower with many zones).
+
+| Pattern | Property zone resolution | API calls |
+|---|---|---|
+| Auth only (no `data-gs-identify`) | Per-zone recall | N calls (one per zone) |
+| Auth + `data-gs-identify` | One bulk record load | 1 call (all zones) |
+| Website (no auth, just `data-gs-identify`) | One bulk record load | 1 call (all zones) |
+
 ### Priority order
 
 When multiple identification methods are present:
 
 ```
-1. Auth session (window.__GS_USER__)     ← highest
-2. Collection lookup (data-gs-identify)
-3. URL token (?gs=encrypted)
-4. Location (geo headers)                ← lowest
+1. Auth session (window.__GS_USER__)     ← highest, checks for data-gs-identify too
+2. Collection lookup (data-gs-identify)  ← website path (slug, email, location)
+3. Location (geo headers)                ← fallback for anonymous visitors
 ```
 
 ---
