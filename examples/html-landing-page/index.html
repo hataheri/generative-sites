@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generative Sites — Demo Landing Page</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #1a1a2e;
+      background: #fafafa;
+      line-height: 1.6;
+    }
+
+    /* --- Nav --- */
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      background: #fff;
+      border-bottom: 1px solid #eee;
+    }
+    nav .logo { font-weight: 700; font-size: 1.1rem; }
+    nav .links { display: flex; gap: 1.5rem; }
+    nav a { text-decoration: none; color: #555; font-size: 0.9rem; }
+
+    /* --- Hero --- */
+    .hero {
+      text-align: center;
+      padding: 5rem 2rem 4rem;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+    }
+    .hero h1 {
+      font-size: 2.8rem;
+      font-weight: 800;
+      margin-bottom: 1rem;
+      max-width: 700px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .hero p {
+      font-size: 1.2rem;
+      opacity: 0.9;
+      max-width: 550px;
+      margin: 0 auto 2rem;
+    }
+    .hero .cta-btn {
+      display: inline-block;
+      padding: 0.9rem 2rem;
+      background: #fff;
+      color: #764ba2;
+      font-weight: 700;
+      font-size: 1rem;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: transform 0.15s;
+    }
+    .hero .cta-btn:hover { transform: translateY(-2px); }
+
+    /* --- Features --- */
+    .features {
+      padding: 4rem 2rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .features h2 { text-align: center; margin-bottom: 2rem; }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 2rem;
+    }
+    .feature-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 2rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .feature-card h3 { margin-bottom: 0.5rem; }
+    .feature-card p { color: #555; font-size: 0.95rem; }
+
+    /* --- Proof --- */
+    .proof {
+      text-align: center;
+      padding: 3rem 2rem;
+      background: #f0f0f5;
+    }
+    .proof p {
+      font-size: 1.1rem;
+      color: #444;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* --- Footer --- */
+    footer {
+      text-align: center;
+      padding: 2rem;
+      color: #888;
+      font-size: 0.85rem;
+    }
+
+    /* --- GS Zone transition (matches gs.js opacity fade) --- */
+    [data-gs-zone] {
+      transition: opacity 0.2s ease;
+    }
+
+    /* --- Debug Panel --- */
+    .debug-panel {
+      position: fixed;
+      bottom: 1rem;
+      right: 1rem;
+      background: #1a1a2e;
+      color: #a5f3fc;
+      padding: 1rem;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 0.8rem;
+      max-width: 350px;
+      z-index: 9999;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    .debug-panel h4 { color: #fff; margin-bottom: 0.5rem; }
+    .debug-panel .event {
+      padding: 2px 0;
+      border-bottom: 1px solid #333;
+    }
+    .debug-panel .tier { color: #4ade80; }
+    .debug-panel .zone-name { color: #fbbf24; }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation (not personalized — same for everyone) -->
+  <nav>
+    <div class="logo">Acme Platform</div>
+    <div class="links">
+      <a href="#">Features</a>
+      <a href="#">Pricing</a>
+      <a href="#">Docs</a>
+      <a href="#">Blog</a>
+    </div>
+  </nav>
+
+  <!-- Hero Section — 3 personalized zones -->
+  <section class="hero">
+    <!--
+      ZONE: headline
+      This text will be replaced by gs.js with personalized content.
+      The fallback ("Ship faster with Acme Platform") is what SEO crawlers
+      and users without JS see. Design stays the same.
+    -->
+    <h1 data-gs-zone="headline">Ship faster with Acme Platform</h1>
+
+    <!--
+      ZONE: subheadline
+      Supporting text. gs.js replaces the text, not the <p> styling.
+    -->
+    <p data-gs-zone="subheadline">The modern API platform that scales with your team. From prototype to production in minutes.</p>
+
+    <!--
+      ZONE: cta-text
+      Only the button LABEL is personalized. The button design, color,
+      href, and hover state are all controlled by CSS (your design).
+    -->
+    <a href="/demo" class="cta-btn">
+      <span data-gs-zone="cta-text">Start Free Trial</span>
+    </a>
+  </section>
+
+  <!-- Features Section (not personalized in this demo) -->
+  <section class="features">
+    <h2>Why teams choose Acme</h2>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <h3>Lightning Fast</h3>
+        <p>Sub-50ms API responses globally. Built on edge infrastructure.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Enterprise Ready</h3>
+        <p>SOC2 Type II, SSO, audit logs, and 99.99% uptime SLA.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Developer First</h3>
+        <p>Beautiful docs, SDKs in every language, and a CLI that just works.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Proof Section — 1 personalized zone -->
+  <section class="proof">
+    <!--
+      ZONE: proof
+      Social proof text personalized by location.
+      "Trusted by 500+ companies" → "Trusted by 40+ companies in Austin"
+    -->
+    <p data-gs-zone="proof">Trusted by 500+ companies worldwide to power their API infrastructure.</p>
+  </section>
+
+  <!-- Footer (not personalized) -->
+  <footer>
+    <p>&copy; 2026 Acme Platform. This is a Generative Sites demo.</p>
+  </footer>
+
+  <!-- Debug Panel — shows GS events in real-time -->
+  <div class="debug-panel" id="debug">
+    <h4>GS Debug</h4>
+    <div id="debug-log">Connecting...</div>
+  </div>
+
+  <!--
+    GENERATIVE SITES SCRIPT
+    - data-key: your public key (Stripe-style, safe in client code)
+    - data-endpoint: where the GS edge API is running
+    - async: non-blocking, loads after page renders
+  -->
+  <script
+    src="http://localhost:3400/gs.js"
+    data-key="pk_test_demo"
+    data-endpoint="http://localhost:3400"
+    async
+  ></script>
+
+  <!-- Debug panel script — shows what GS is doing -->
+  <script>
+    var debugLog = document.getElementById('debug-log');
+    var events = [];
+
+    function addDebug(msg) {
+      events.push(msg);
+      if (events.length > 8) events.shift();
+      debugLog.innerHTML = events.join('<br>');
+    }
+
+    // Wait for GS to load
+    var checkGS = setInterval(function() {
+      if (window.GS) {
+        clearInterval(checkGS);
+
+        GS.on('meta', function(data) {
+          addDebug('<span class="tier">Tier: ' + data.tier + '</span>');
+          if (data.location) {
+            addDebug('Location: ' + data.location.city + ', ' + data.location.region);
+          }
+        });
+
+        GS.on('zone:render', function(data) {
+          addDebug('<span class="zone-name">' + data.zone + ':</span> ' + data.text.substring(0, 40) + (data.text.length > 40 ? '...' : ''));
+        });
+
+        GS.on('done', function(data) {
+          addDebug('Done in ' + (data.duration_ms || '?') + 'ms');
+        });
+
+        GS.on('error', function(data) {
+          addDebug('Error: ' + data.code);
+        });
+
+        addDebug('GS loaded, discovering zones...');
+      }
+    }, 100);
+  </script>
+
+</body>
+</html>
