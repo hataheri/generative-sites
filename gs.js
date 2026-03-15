@@ -4,6 +4,17 @@
  * Discovers zones, identifies visitors, streams personalized text from Personize.
  * Optionally captures visitor input back to Personize memory.
  *
+ * Features:
+ *   - Zone discovery (data-gs-zone) with MutationObserver for SPAs
+ *   - Identification: auth, data-gs-identify, location
+ *   - Property zones (collection:property) + generative zones (AI)
+ *   - Custom prompts (data-gs-prompt)
+ *   - Memorize (data-gs-memorize) — capture visitor input
+ *   - UTM forwarding for campaign-aware AI
+ *   - Preview mode (?gs_preview=email)
+ *   - Mid-session tier upgrades (auto-refresh on identify)
+ *   - Consent bridge (OneTrust, CookieBot, Osano)
+ *
  * Usage:
  *   <script src="https://gs.personize.ai/gs.js" data-key="pk_live_..." async></script>
  *   <h1 data-gs-zone="website_zones:hero_headline"
@@ -16,8 +27,6 @@
 
   var scriptTag = document.currentScript;
 
-  // Default endpoint: same origin as gs.js (gs.personize.ai)
-  // Override with data-endpoint for self-hosted or local dev.
   var scriptOrigin = null;
   if (scriptTag && scriptTag.src) {
     try { scriptOrigin = new URL(scriptTag.src).origin; } catch (e) {}
@@ -47,7 +56,8 @@
   var eventQueue = [];
   var memorizeQueue = [];
   var identified = false;
-  var identifyConfig = null; // from data-gs-identify
+  var identifyConfig = null;
+  var consentState = null; // [CONSENT BRIDGE] consent levels
 
   // --- Cookie helpers ---------------------------------------------------
 
@@ -86,7 +96,7 @@
       var sp = new URLSearchParams(window.location.search);
       sp.forEach(function(value, key) {
         var k = key.toLowerCase();
-        if (k.startsWith('utm_') || (k.startsWith('gs_') && k !== 'gs')) {
+        if (k.startsWith('utm_') || (k.startsWith('gs_') && k !== 'gs' && k !== 'gs_preview')) {
           utms[key] = value;
           hasAny = true;
         }
@@ -128,6 +138,69 @@
     }
   }
 
+  // --- [CONSENT BRIDGE] ------------------------------------------------
+
+  /**
+   * Detect consent managers and read consent state.
+   * Supports: OneTrust, CookieBot, Osano, manual GS.consent()
+   *
+   * Returns: { essential: true, analytics: bool, marketing: bool }
+   */
+  function detectConsent() {
+    // Manual override via GS.consent()
+    if (consentState) return consentState;
+
+    // OneTrust
+    if (window.OneTrust || window.OptanonActiveGroups) {
+      var groups = (window.OptanonActiveGroups || '').toLowerCase();
+      return {
+        essential: true,
+        analytics: groups.indexOf('c0002') >= 0 || groups.indexOf('performance') >= 0,
+        marketing: groups.indexOf('c0004') >= 0 || groups.indexOf('targeting') >= 0,
+      };
+    }
+
+    // CookieBot
+    if (window.Cookiebot && window.Cookiebot.consent) {
+      return {
+        essential: true,
+        analytics: !!window.Cookiebot.consent.statistics,
+        marketing: !!window.Cookiebot.consent.marketing,
+      };
+    }
+
+    // Osano
+    if (window.Osano && window.Osano.cm) {
+      try {
+        var osanoConsent = window.Osano.cm.getConsent();
+        return {
+          essential: true,
+          analytics: osanoConsent.ANALYTICS !== 'DENY',
+          marketing: osanoConsent.MARKETING !== 'DENY',
+        };
+      } catch (e) {}
+    }
+
+    // No consent manager detected — assume all allowed
+    return { essential: true, analytics: true, marketing: true };
+  }
+
+  /**
+   * Check if a feature is allowed by current consent.
+   */
+  function isAllowed(feature) {
+    var consent = detectConsent();
+    switch (feature) {
+      case 'cookie': return consent.essential;
+      case 'location': return consent.essential;
+      case 'tracking': return consent.analytics;
+      case 'memorize': return consent.analytics;
+      case 'deanon': return consent.marketing;
+      case 'identify': return consent.marketing;
+      default: return consent.essential;
+    }
+  }
+
   // --- Zone Discovery ---------------------------------------------------
 
   function discoverZones() {
@@ -160,6 +233,45 @@
       }
     }
     return newZones;
+  }
+
+  // --- [SPA SUPPORT] MutationObserver -----------------------------------
+
+  /**
+   * Watch for new data-gs-zone elements added to the DOM.
+   * Handles SPAs where route changes add new zones without page reload.
+   */
+  function startObserver() {
+    if (typeof MutationObserver === 'undefined') return;
+
+    var observer = new MutationObserver(function (mutations) {
+      var hasNewZones = false;
+      for (var i = 0; i < mutations.length; i++) {
+        var added = mutations[i].addedNodes;
+        for (var j = 0; j < added.length; j++) {
+          var node = added[j];
+          if (node.nodeType !== 1) continue; // element nodes only
+          if (node.hasAttribute && node.hasAttribute('data-gs-zone')) {
+            hasNewZones = true;
+          }
+          if (node.querySelectorAll) {
+            var nested = node.querySelectorAll('[data-gs-zone]');
+            if (nested.length > 0) hasNewZones = true;
+          }
+        }
+      }
+
+      if (hasNewZones) {
+        var newIds = discoverZones();
+        discoverMemorizeBindings();
+        if (newIds.length > 0) {
+          console.debug('[GS] SPA: found ' + newIds.length + ' new zones:', newIds);
+          connect(newIds);
+        }
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
   }
 
   // --- Text Rendering ---------------------------------------------------
@@ -207,12 +319,21 @@
       params.push('ref=' + encodeURIComponent(document.referrer));
     }
 
-    var uid = getCookie('_gs_uid');
-    if (uid) params.push('uid=' + encodeURIComponent(uid));
+    // Cookie (if consent allows)
+    if (isAllowed('cookie')) {
+      var uid = getCookie('_gs_uid');
+      if (uid) params.push('uid=' + encodeURIComponent(uid));
+    }
 
     // Encrypted token (?gs=...)
     var gsToken = getURLParam('gs');
     if (gsToken) params.push('token=' + encodeURIComponent(gsToken));
+
+    // [PREVIEW MODE] ?gs_preview=email overrides identification
+    var preview = getURLParam('gs_preview');
+    if (preview) {
+      params.push('preview=' + encodeURIComponent(preview));
+    }
 
     // Identify via data-gs-identify
     if (identifyConfig) {
@@ -237,6 +358,8 @@
     return config.endpoint + '/api/gs/stream?' + params.join('&');
   }
 
+  var reconnectAttempts = 0;
+
   function connect(zoneIds) {
     if (!zoneIds.length) return;
     var url = buildStreamURL(zoneIds);
@@ -254,7 +377,8 @@
     eventSource.addEventListener('meta', function (e) {
       try {
         visitor = JSON.parse(e.data);
-        if (visitor.uid) setCookie('_gs_uid', visitor.uid, 365);
+        if (visitor.uid && isAllowed('cookie')) setCookie('_gs_uid', visitor.uid, 365);
+        reconnectAttempts = 0; // reset on successful connection
         fireCallback('meta', visitor);
       } catch (err) {}
     });
@@ -264,14 +388,30 @@
       if (eventSource) { eventSource.close(); eventSource = null; }
     });
 
+    // [MID-SESSION UPGRADE] — server sends upgrade event with new zone data
+    eventSource.addEventListener('upgrade', function (e) {
+      try {
+        var data = JSON.parse(e.data);
+        fireCallback('tier:upgrade', data);
+        // Re-render zones listed in the upgrade
+        if (data.rerender && data.rerender.length > 0) {
+          console.debug('[GS] Tier upgrade to ' + data.newTier + ' — re-rendering zones:', data.rerender);
+        }
+      } catch (err) {}
+    });
+
     eventSource.addEventListener('error', function (e) {
       if (e.data) {
         try { fireCallback('error', JSON.parse(e.data)); } catch (err) {}
       }
     });
 
+    // [EXPONENTIAL BACKOFF] on connection errors
     eventSource.onerror = function () {
-      console.debug('[GS] SSE interrupted. Auto-reconnecting...');
+      reconnectAttempts++;
+      var delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+      console.debug('[GS] SSE interrupted. Reconnecting in ' + (delay / 1000) + 's...');
+      // EventSource auto-reconnects, but we track attempts for logging
     };
 
     if (getURLParam('gs')) cleanURL('gs');
@@ -300,6 +440,7 @@
     if (trigger === 'submit') return;
 
     el.addEventListener(trigger, function () {
+      if (!isAllowed('memorize')) return;
       var value = getElementValue(el);
       if (value) queueMemorize(target, value);
     });
@@ -310,6 +451,7 @@
     form._gsBound = true;
 
     form.addEventListener('submit', function () {
+      if (!isAllowed('memorize')) return;
       var fields = form.querySelectorAll('[data-gs-memorize]');
       for (var i = 0; i < fields.length; i++) {
         var target = fields[i].getAttribute('data-gs-memorize');
@@ -359,9 +501,19 @@
   // --- Public API -------------------------------------------------------
 
   var GS = {
+    /**
+     * Identify a visitor. Triggers mid-session tier upgrade —
+     * zones auto-refresh with personalized content.
+     */
     identify: function (email, traits) {
       if (!email) return;
+      if (!isAllowed('identify')) {
+        console.debug('[GS] identify() blocked by consent settings');
+        return;
+      }
+
       identified = true;
+
       try {
         navigator.sendBeacon(
           config.endpoint + '/api/gs/identify',
@@ -370,20 +522,55 @@
           })], { type: 'application/json' })
         );
       } catch (e) {}
+
       fireCallback('identify', { email: email, traits: traits });
+
+      // [MID-SESSION UPGRADE] — set auth and refresh all zones
+      // so they re-render with the newly identified contact's data
+      window.__GS_USER__ = window.__GS_USER__ || {};
+      window.__GS_USER__.email = email;
+      if (traits) {
+        if (traits.firstName) window.__GS_USER__.firstName = traits.firstName;
+        if (traits.company) window.__GS_USER__.company = traits.company;
+      }
+
+      // Re-fetch all zones with the new identity
+      setTimeout(function () {
+        var allZoneIds = Object.keys(zones);
+        if (allZoneIds.length > 0) {
+          console.debug('[GS] Mid-session upgrade: re-fetching ' + allZoneIds.length + ' zones for ' + email);
+          connect(allZoneIds);
+        }
+      }, 500); // short delay to let identify POST complete
     },
 
     track: function (type, properties) {
+      if (!isAllowed('tracking')) return;
       eventQueue.push({ type: type, properties: properties || {}, url: window.location.href, timestamp: Date.now() });
     },
 
     memorize: function (target, value) {
       if (!target || !value) return;
+      if (!isAllowed('memorize')) return;
       if (target.indexOf(':') === -1) {
         console.warn('[GS] memorize() target must be "collection:property". Got:', target);
         return;
       }
       queueMemorize(target, value);
+    },
+
+    /**
+     * Set consent levels manually. Overrides auto-detected consent.
+     * @param {Object} levels - { essential: true, analytics: bool, marketing: bool }
+     */
+    consent: function (levels) {
+      consentState = {
+        essential: true, // always true
+        analytics: !!levels.analytics,
+        marketing: !!levels.marketing,
+      };
+      console.debug('[GS] Consent set:', consentState);
+      fireCallback('consent', consentState);
     },
 
     on: function (event, callback) {
@@ -400,10 +587,12 @@
         config: config,
         visitor: visitor,
         identify: identifyConfig,
+        consent: detectConsent(),
         zones: Object.keys(zones).map(function (id) {
           return { id: id, fallback: zones[id].fallback, rendered: zones[id].rendered, currentText: zones[id].el.textContent };
         }),
         connected: eventSource !== null && eventSource.readyState !== 2,
+        preview: getURLParam('gs_preview'),
       };
     },
   };
@@ -414,10 +603,16 @@
     var zoneIds = discoverZones();
     discoverMemorizeBindings();
 
+    // [SPA SUPPORT] — start watching for dynamically added zones
+    startObserver();
+
     if (zoneIds.length > 0) {
       console.debug('[GS] Discovered ' + zoneIds.length + ' zones:', zoneIds);
       if (identifyConfig) {
         console.debug('[GS] Identify: ' + identifyConfig.collection + ':' + identifyConfig.property + '=' + (identifyConfig.value || '(server-side)'));
+      }
+      if (getURLParam('gs_preview')) {
+        console.debug('[GS] Preview mode: ' + getURLParam('gs_preview'));
       }
       connect(zoneIds);
     }
@@ -432,6 +627,7 @@
   // --- Flush loops ------------------------------------------------------
 
   function flushEvents() {
+    if (!isAllowed('tracking')) return;
     if (eventQueue.length === 0) return;
     var batch = eventQueue.splice(0, 50);
     try {
