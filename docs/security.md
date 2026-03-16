@@ -76,7 +76,19 @@ It's derived from the secret key via HMAC — forging one without the secret key
 
 **By design.** gs.js runs on customers' websites (any domain). Same model as HubSpot, Intercom, Google Analytics.
 
-### 8. Secret key leak
+### 8. Preview mode abuse
+
+**Risk:** Someone uses `?gs_preview=email` to see another contact's content.
+
+**Mitigated:** Preview mode **only works with `pk_test_` keys**. Production (`pk_live_`) keys reject preview requests with `403 PREVIEW_REQUIRES_TEST_KEY`. Test keys shouldn't be used on production sites.
+
+### 9. Consent bypass
+
+**Risk:** Someone calls `GS.identify()` or `GS.track()` despite denied consent.
+
+**Mitigated:** gs.js checks consent state before every identify/track/memorize call. If the required consent level (analytics or marketing) is denied, the call is silently dropped. The consent bridge auto-detects OneTrust, CookieBot, and Osano.
+
+### 10. Secret key leak
 
 **Critical.** If `sk_live_` is exposed, it grants full Personize API access. The entire security model depends on this key staying server-side.
 
@@ -97,6 +109,8 @@ It's derived from the secret key via HMAC — forging one without the secret key
 | Collection names visible | None | Metadata, not data access |
 | Memorize abuse | Low | Identity required + rate limited |
 | SSE interception | None | Per-visitor + HTTPS |
+| Preview mode abuse | None | Restricted to pk_test_ keys |
+| Consent bypass | None | gs.js checks consent before every call |
 | **Secret key leak** | **Critical** | Must stay server-side |
 
 ---

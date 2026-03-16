@@ -1,12 +1,10 @@
 # Zone Reference — Complete Guide
 
-Every HTML attribute, every identification method, every prompt control option.
+Every HTML attribute, every identification method, every prompt control option, every capability.
 
 ---
 
-## The Two Attributes
-
-Every zone needs exactly ONE attribute. Some zones optionally add more.
+## All HTML Attributes
 
 | Attribute | Required | What It Does |
 |---|---|---|
@@ -15,6 +13,48 @@ Every zone needs exactly ONE attribute. Some zones optionally add more.
 | `data-gs-prompt` | Optional | Custom instructions for AI-generated zones |
 | `data-gs-memorize` | Optional | Capture input and write it back to Personize |
 | `data-gs-trigger` | Optional | When to capture (blur, change, submit, click) |
+
+## All JavaScript Methods
+
+| Method | What It Does |
+|---|---|
+| `GS.identify(email, traits)` | Identify visitor + auto-refresh all zones (mid-session upgrade) |
+| `GS.track(event, properties)` | Track custom event (batched, sent every 5s) |
+| `GS.memorize(target, value)` | Write to collection:property for current visitor |
+| `GS.consent({ analytics, marketing })` | Set consent levels (overrides auto-detected managers) |
+| `GS.refresh(zoneId?)` | Force re-render one or all zones |
+| `GS.on(event, callback)` | Listen: `zone:render`, `meta`, `done`, `error`, `identify`, `memorize`, `tier:upgrade`, `consent` |
+| `GS.debug()` | Returns config, visitor, zones, consent state, preview mode |
+
+## All URL Parameters
+
+| Parameter | What It Does |
+|---|---|
+| `?gs=encrypted_token` | Identify visitor via encrypted token |
+| `?gs_preview=email` | Preview mode — see what a contact would see (test keys only) |
+| `?gs_id=value` | Generic identify value (fallback for data-gs-identify) |
+| `?utm_source`, `?utm_campaign`, etc. | Forwarded as AI context for campaign-aware copy |
+| `/for/slug` | Unique URL — slug matched via data-gs-identify |
+
+## All Capabilities
+
+| Capability | Status |
+|---|---|
+| Property zones (collection:property — instant, no LLM) | Working |
+| Generative zones (AI-written with prompt control) | Working |
+| Auth session identification (window.__GS_USER__) | Working |
+| Collection lookup identification (data-gs-identify) | Working |
+| Location identification (automatic from geo headers) | Working |
+| Deanonymization (RB2B person-level, Clearbit company-level) | Working (configure API keys on Edge API) |
+| Mid-session tier upgrades (GS.identify → auto-refresh) | Working |
+| SPA support (MutationObserver for dynamic zones) | Working |
+| Preview mode (?gs_preview=email, test keys only) | Working |
+| Consent bridge (OneTrust, CookieBot, Osano auto-detection) | Working |
+| Memorize from website (data-gs-memorize) | Working |
+| UTM forwarding for campaign-aware AI | Working |
+| Custom prompts per zone (data-gs-prompt) | Working |
+| Event tracking with session narrative memorization | Working |
+| Minified build (gs.min.js, ~3kb gzipped) | Available |
 
 ---
 
@@ -475,31 +515,144 @@ No collections, no identify, no contact lookup. AI generates everything based on
 
 ---
 
+## Preview Mode
+
+Test what any contact would see. Add `?gs_preview=email` to the URL:
+
+```
+https://yoursite.com/pricing?gs_preview=sarah@acme.com
+```
+
+- Edge API resolves identity as `sarah@acme.com`
+- All zones render with Sarah's personalized content
+- **Only works with `pk_test_` keys** — rejected with `pk_live_` (security)
+- `GS.debug()` shows `preview: "sarah@acme.com"` when active
+
+Useful for QA-ing campaign pages before sending links.
+
+---
+
+## SPA Support (MutationObserver)
+
+gs.js watches for new `data-gs-zone` elements added to the DOM after initial page load. When a React/Next.js/Vue route change renders new zones, they're automatically discovered and connected:
+
+```
+Initial load → discovers 3 zones → connects SSE
+User navigates (SPA) → new DOM elements with data-gs-zone
+MutationObserver → discovers 2 new zones → auto-connects SSE
+```
+
+Also discovers new `data-gs-memorize` bindings on route changes.
+
+No extra code needed — works automatically with React Router, Next.js App Router, Vue Router.
+
+---
+
+## Mid-Session Tier Upgrades
+
+When `GS.identify()` is called, gs.js:
+
+1. Sends the identify event to the server
+2. Sets `window.__GS_USER__` with the email
+3. Waits 500ms (for the identify POST to complete)
+4. Re-connects SSE for all zones with the new identity
+
+All zones re-render with personalized content for the identified contact.
+
+```javascript
+// Visitor fills a form → call identify → zones auto-refresh
+document.querySelector('form').addEventListener('submit', function(e) {
+  var email = document.querySelector('[name=email]').value;
+  GS.identify(email, { firstName: 'Sarah' });
+  // All zones will re-render with Sarah's content ~500ms later
+});
+```
+
+---
+
+## Consent Bridge
+
+Auto-detects consent managers and gates features:
+
+| Manager | Detection |
+|---|---|
+| **OneTrust** | `window.OneTrust` or `OptanonActiveGroups` |
+| **CookieBot** | `window.Cookiebot.consent` |
+| **Osano** | `window.Osano.cm` |
+
+| Feature | Required Consent |
+|---|---|
+| Location personalization | Essential (always allowed) |
+| Cookies (`_gs_uid`) | Essential |
+| Event tracking (`GS.track()`) | Analytics |
+| Memorize writes (`GS.memorize()`) | Analytics |
+| Deanonymization (Clearbit/RB2B) | Marketing |
+| `GS.identify()` | Marketing |
+
+If no consent manager is detected, all features are allowed.
+
+Manual override:
+
+```javascript
+GS.consent({ analytics: true, marketing: false });
+```
+
+When consent is denied, the feature is silently skipped — no errors, no broken UX.
+
+---
+
+## Deanonymization
+
+Server-side IP-based identification for anonymous B2B visitors:
+
+| Provider | Returns | Tier Achieved |
+|---|---|---|
+| **RB2B** | Person: email, name, title, company | Known |
+| **Clearbit Reveal** | Company: name, industry, size | Account |
+
+Runs in a waterfall (RB2B first, Clearbit fallback). Both cache results per-IP.
+
+Configure on the Edge API (not in gs.js):
+
+```
+RB2B_API_KEY=your_key
+CLEARBIT_API_KEY=your_key
+```
+
+Requires **marketing consent** — skipped if consent is denied.
+
+---
+
 ## JavaScript API Reference
 
 ```javascript
-// Identify the visitor
+// Identify (triggers mid-session zone refresh)
 GS.identify('sarah@acme.com', { firstName: 'Sarah', company: 'Acme Corp' });
 
-// Track events (improves future AI generation)
+// Track events (batched, sent every 5s)
 GS.track('feature_used', { feature: 'batch-api' });
 
-// Write to a specific collection:property
+// Write to collection:property
 GS.memorize('feedback:feature_request', 'Need batch processing');
 
-// Force re-render all zones
-GS.refresh();
+// Set consent levels
+GS.consent({ analytics: true, marketing: false });
 
-// Force re-render one zone
-GS.refresh('headline');
+// Re-render zones
+GS.refresh();             // all zones
+GS.refresh('headline');   // one zone
 
-// Listen for events
+// Callbacks
 GS.on('zone:render', function(d) { console.log(d.zone, d.text); });
 GS.on('meta', function(d) { console.log(d.tier, d.location); });
 GS.on('memorize', function(d) { console.log(d.target, d.value); });
+GS.on('tier:upgrade', function(d) { console.log('Upgraded to', d.newTier); });
+GS.on('consent', function(d) { console.log('Consent:', d); });
+GS.on('identify', function(d) { console.log(d.email); });
 GS.on('done', function(d) { console.log('Done in', d.duration_ms, 'ms'); });
 GS.on('error', function(d) { console.log(d.code, d.message); });
 
 // Debug
 console.log(GS.debug());
+// → { config, visitor, zones, consent: { essential, analytics, marketing }, preview: null }
 ```

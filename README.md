@@ -241,6 +241,7 @@ Requires an identified visitor. Anonymous writes are silently dropped.
 
 ```javascript
 // Identify a visitor (after login or form fill)
+// Triggers mid-session upgrade — all zones auto-refresh with personalized content
 GS.identify('sarah@acme.com', { firstName: 'Sarah', company: 'Acme Corp' });
 
 // Track events (improves future AI generation)
@@ -248,6 +249,9 @@ GS.track('feature_used', { feature: 'batch-api' });
 
 // Write to Personize memory
 GS.memorize('feedback:feature_request', 'Need batch processing');
+
+// Set consent levels (overrides auto-detected OneTrust/CookieBot/Osano)
+GS.consent({ analytics: true, marketing: false });
 
 // Re-render zones
 GS.refresh();             // all zones
@@ -257,9 +261,105 @@ GS.refresh('headline');   // one zone
 GS.on('zone:render', function(d) { console.log(d.zone, d.text); });
 GS.on('meta', function(d) { console.log(d.tier, d.location); });
 GS.on('memorize', function(d) { console.log(d.target, d.value); });
+GS.on('tier:upgrade', function(d) { console.log('Upgraded to', d.newTier); });
+GS.on('consent', function(d) { console.log('Consent:', d); });
 
-// Debug
+// Debug (shows config, visitor, zones, consent, preview state)
 console.log(GS.debug());
+```
+
+---
+
+## Mid-Session Tier Upgrades
+
+When a visitor identifies mid-session (e.g., fills a form), all zones automatically re-render with personalized content:
+
+```
+Visit starts → Anonymous (location only)
+  ↓
+Visitor fills form → GS.identify('sarah@acme.com')
+  ↓
+gs.js sets __GS_USER__, waits 500ms, re-connects SSE
+  ↓
+All zones refresh → "Welcome" becomes "Sarah, cut Acme's API costs by 40%"
+```
+
+No extra code needed. `GS.identify()` handles everything.
+
+---
+
+## Preview Mode
+
+Test what any contact would see without being them:
+
+```
+https://yoursite.com/pricing?gs_preview=sarah@acme.com
+```
+
+The Edge API resolves identity as `sarah@acme.com` and serves her personalized zones. Restricted to `pk_test_` keys only — won't work with live keys (security).
+
+Useful for sales teams QA-ing campaign pages before sending.
+
+---
+
+## SPA Support
+
+gs.js uses a `MutationObserver` to watch for new `data-gs-zone` elements added to the DOM. When a React/Next.js/Vue route change renders new zones, they're automatically discovered and connected:
+
+```
+Page load → discovers 3 zones → connects SSE
+  ↓
+User navigates to /dashboard (SPA route change)
+  ↓
+MutationObserver detects 2 new zones → auto-connects SSE for new zones
+```
+
+No extra code needed. Works with React Router, Next.js App Router, Vue Router, or any SPA framework.
+
+---
+
+## Consent Bridge
+
+gs.js auto-detects consent managers and gates features by consent level:
+
+| Manager | Auto-detected via |
+|---|---|
+| **OneTrust** | `window.OneTrust` / `OptanonActiveGroups` |
+| **CookieBot** | `window.Cookiebot.consent` |
+| **Osano** | `window.Osano.cm` |
+
+| Consent Level | Features Allowed |
+|---|---|
+| **Essential** | Location personalization, cookies |
+| **Analytics** | Event tracking, memorize writes |
+| **Marketing** | Deanonymization, GS.identify() |
+
+If no consent manager is detected, all features are allowed by default. Override manually:
+
+```javascript
+GS.consent({ analytics: true, marketing: false });
+```
+
+When consent is denied for a feature, gs.js silently skips it — no errors, no broken UX. Zones still render (with less personalization).
+
+---
+
+## Deanonymization
+
+When configured on the Edge API, anonymous B2B visitors are identified by IP:
+
+| Provider | What it returns | Tier |
+|---|---|---|
+| **RB2B** | Person: email, name, title, company | Known |
+| **Clearbit Reveal** | Company: name, industry, size | Account |
+
+Providers run in a waterfall: RB2B first (person-level), Clearbit fallback (company-level). Both have response caching to avoid redundant API calls.
+
+Configure by setting env vars on the Edge API:
+
+```
+RB2B_API_KEY=your_key
+CLEARBIT_API_KEY=your_key
 ```
 
 ---

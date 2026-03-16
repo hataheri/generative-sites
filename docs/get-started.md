@@ -328,11 +328,41 @@ Events are batched (5-second intervals) and memorized to Personize as session na
 
 ---
 
+## Path 7: Preview Mode — QA Before Sending (1 minute)
+
+Test what any contact would see by adding `?gs_preview=email` to your URL:
+
+```
+https://yoursite.com/pricing?gs_preview=sarah@acme.com
+```
+
+All zones render as if Sarah is visiting. Only works with `pk_test_` keys (security).
+
+---
+
+## Path 8: Consent Management (2 minutes)
+
+gs.js auto-detects OneTrust, CookieBot, and Osano. Features are gated by consent level:
+
+- **Essential** (always on): location personalization, cookies
+- **Analytics** (requires consent): event tracking, memorize
+- **Marketing** (requires consent): deanonymization, GS.identify()
+
+Manual override:
+
+```javascript
+GS.consent({ analytics: true, marketing: false });
+```
+
+If no consent manager is detected, all features are allowed by default. When consent is denied, features are silently skipped — no errors, no broken UX.
+
+---
+
 ## What's Next
 
 | Goal | Guide |
 |---|---|
-| Every HTML attribute explained | [Zone Reference](zone-reference.md) |
+| Every attribute, method, and capability | [Zone Reference](zone-reference.md) |
 | Install on WordPress, Webflow, Shopify | [CMS Guides](cms-guides.md) |
 | How the product flow works (no IDE) | [Product Flow](product-flow.md) |
 | Security model | [Security](security.md) |
