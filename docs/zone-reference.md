@@ -41,7 +41,8 @@ Every HTML attribute, every identification method, every prompt control option, 
 | Capability | Status |
 |---|---|
 | Property zones (collection:property — instant, no LLM) | Working |
-| Generative zones (AI-written with prompt control) | Working |
+| Structured generative zones (output.field — grouped AI outputs) | Working |
+| Flat generative zones (AI-written with prompt control) | Working |
 | Auth session identification (window.__GS_USER__) | Working |
 | Collection lookup identification (data-gs-identify) | Working |
 | Location identification (automatic from geo headers) | Working |
@@ -60,6 +61,14 @@ Every HTML attribute, every identification method, every prompt control option, 
 
 ## data-gs-zone — What to Display
 
+Three zone syntaxes, distinguished by separator:
+
+| Syntax | Separator | Type | Resolution | Example |
+|---|---|---|---|---|
+| `collection:property` | `:` | Property zone | Memory lookup (instant) | `website_zones:hero_headline` |
+| `output.field` | `.` | Structured generative | AI output → JSON field | `hero.headline` |
+| `plain-id` | none | Flat generative | AI output → plain text | `headline` |
+
 ### Property zone (from Personize memory, instant, no AI)
 
 ```html
@@ -70,29 +79,55 @@ Format: `collectionSystemName:propertySystemName`
 
 The Edge API reads the `hero_headline` property from the `website_zones` collection for the identified visitor. If the visitor has that property, it replaces the text. If not, fallback stays.
 
-### Generative zone (AI-written at serve time)
+### Structured generative zone (grouped AI output)
+
+```html
+<h1 data-gs-zone="hero.headline">Default headline</h1>
+<p data-gs-zone="hero.subtitle">Default subtitle</p>
+<button data-gs-zone="hero.cta">Get Started</button>
+```
+
+Format: `outputName.fieldName`
+
+Zones sharing the same output name (`hero`) are grouped and generated as one coherent JSON object. The AI produces `{"headline": "...", "subtitle": "...", "cta": "..."}` and each field is delivered to its element **progressively** — as soon as the AI finishes that output group.
+
+Use structured zones when:
+- Multiple elements should be **contextually consistent** (headline + subtitle + CTA)
+- You want **coherent messaging** across a section
+- You want **faster delivery** (one AI output instead of three separate ones)
+
+Rules:
+- Exactly one dot allowed (no deep paths like `hero.section.title`)
+- Output name and field name must be alphanumeric/underscore/hyphen
+- Custom prompts via `data-gs-prompt` are not used on individual structured zones — the field names and context guide the AI
+
+### Flat generative zone (independent AI text)
 
 ```html
 <h1 data-gs-zone="headline">Fallback text</h1>
 ```
 
-Format: just a name (no colon)
+Format: just a name (no colon, no dot)
 
-The Edge API generates text using Personize `prompt()` with the visitor's context (location, company, profile) + brand guidelines + the zone's prompt instruction.
+The Edge API generates text using Personize `prompt()` with the visitor's context (location, company, profile) + brand guidelines + the zone's prompt instruction. Use `data-gs-prompt` to control what the AI writes.
 
-### Mixing both on the same page
+### Mixing all three on the same page
 
 ```html
 <!-- Property zones — instant, from memory -->
 <h1 data-gs-zone="website_zones:hero_headline">Welcome</h1>
 <p data-gs-zone="website_zones:sub_headline">We help teams</p>
 
-<!-- Generative zones — AI-written, uses visitor context -->
-<span data-gs-zone="cta-text">Get Started</span>
-<p data-gs-zone="proof">Trusted by 500+ companies</p>
+<!-- Structured generative — coherent group, streamed progressively -->
+<p data-gs-zone="hero.subtitle">Built for teams</p>
+<button data-gs-zone="hero.cta">Get Started</button>
+
+<!-- Flat generative — independent AI text, custom prompts -->
+<p data-gs-zone="proof"
+   data-gs-prompt="Social proof mentioning their city">Trusted by 500+ companies</p>
 ```
 
-Property zones are served first (instant). Generative zones follow (2-5 seconds).
+Property zones are served first (instant). Structured zones arrive as each group finishes generating. Flat zones arrive independently.
 
 ---
 

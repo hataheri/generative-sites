@@ -25,11 +25,25 @@ Paste in your website's `<head>`:
 
 ### Step 2: Add zones
 
+Use **structured zones** (`output.field`) to generate a coherent hero section:
+
+```html
+<!-- Structured zones — hero group generated as one coherent output -->
+<h1 data-gs-zone="hero.headline">Welcome to our platform</h1>
+<p data-gs-zone="hero.subtitle">We help teams build faster.</p>
+<span data-gs-zone="hero.cta">Get Started</span>
+
+<!-- Flat zone — independent text -->
+<p data-gs-zone="proof">Trusted by 500+ companies worldwide.</p>
+```
+
+The `hero.headline`, `hero.subtitle`, and `hero.cta` zones are grouped — the AI generates them together so they complement each other. `proof` is independent.
+
+You can also use flat zones (no dot) for fully independent text:
+
 ```html
 <h1 data-gs-zone="headline">Welcome to our platform</h1>
 <p data-gs-zone="subheadline">We help teams build faster.</p>
-<span data-gs-zone="cta-text">Get Started</span>
-<p data-gs-zone="proof">Trusted by 500+ companies worldwide.</p>
 ```
 
 ### What happens
@@ -37,12 +51,13 @@ Paste in your website's `<head>`:
 A visitor from Austin, TX sees:
 
 ```
-headline:    "Trusted by teams across Texas"
-subheadline: "The platform Austin's fastest-growing companies rely on"
-proof:       "14 companies in Austin use our platform daily"
+hero.headline: "Trusted by teams across Texas"
+hero.subtitle: "The platform Austin's fastest-growing companies rely on"
+hero.cta:      "See It in Action"
+proof:         "14 companies in Austin use our platform daily"
 ```
 
-The AI uses the visitor's location (from edge headers — free, automatic) to write relevant copy. No contact data needed.
+The AI uses the visitor's location (from edge headers — free, automatic) to write relevant copy. No contact data needed. Structured zones stream progressively — the hero section appears as soon as the AI finishes generating it, without waiting for `proof`.
 
 ---
 
@@ -305,7 +320,14 @@ Events are batched (5-second intervals) and memorized to Personize as session na
     The modern platform for growing teams
   </p>
 
-  <!-- Generative zones (AI-written, with custom prompts) -->
+  <!-- Structured generative zones (coherent group, streamed progressively) -->
+  <div class="benefits">
+    <h2 data-gs-zone="benefits.title">Why teams choose us</h2>
+    <p data-gs-zone="benefits.description">We deliver results.</p>
+    <span data-gs-zone="benefits.cta">Learn More</span>
+  </div>
+
+  <!-- Flat generative zones (independent AI text, with custom prompts) -->
   <span data-gs-zone="cta-text"
         data-gs-prompt="CTA with their first name. Max 5 words.">
     Book a Demo

@@ -145,35 +145,77 @@
     </div>
   </nav>
 
-  <!-- Hero Section — 3 personalized zones -->
+  <!--
+    ═══════════════════════════════════════════════════════════
+    This demo showcases all THREE zone types on one page:
+
+    1. PROPERTY ZONES (collection:property)
+       → Instant lookup from Personize memory. No AI at serve time.
+       → Requires data-gs-identify to find the visitor's record.
+       → Example: website_zones:hero_headline
+
+    2. STRUCTURED GENERATIVE ZONES (output.field)
+       → AI-generated. Zones with the same output name are generated
+         together as one coherent JSON object. Each field streams to
+         its element progressively as the AI finishes each group.
+       → Example: benefits.title, benefits.description, benefits.cta
+
+    3. FLAT GENERATIVE ZONES (plain-id)
+       → AI-generated. Each zone is an independent text output.
+       → Custom prompt via data-gs-prompt controls what AI writes.
+       → Example: proof
+
+    URL patterns that activate property zones:
+      /for/sarah-chen  → identify by slug
+      ?email=sarah@acme.com → identify by email
+    ═══════════════════════════════════════════════════════════
+  -->
+
+  <!-- ── PROPERTY ZONES ── instant from Personize memory ────────── -->
   <section class="hero">
     <!--
-      ZONE: headline
-      This text will be replaced by gs.js with personalized content.
-      The fallback ("Ship faster with Acme Platform") is what SEO crawlers
-      and users without JS see. Design stays the same.
+      ZONE: website_zones:hero_headline (property zone)
+      Reads the hero_headline property from the website_zones collection.
+      data-gs-identify tells the Edge API to search by slug from the URL.
+      If visitor has a record (e.g. /for/sarah-chen), shows their content.
+      If not, fallback text stays — then AI zones below still personalize.
     -->
-    <h1 data-gs-zone="headline">Ship faster with Acme Platform</h1>
+    <h1 data-gs-zone="website_zones:hero_headline"
+        data-gs-identify="website_zones:slug">
+      Ship faster with Acme Platform
+    </h1>
 
     <!--
-      ZONE: subheadline
-      Supporting text. gs.js replaces the text, not the <p> styling.
+      ZONE: website_zones:sub_headline (property zone — same collection)
+      All website_zones:* zones are served from the same record loaded
+      by data-gs-identify above. One lookup, all properties.
     -->
-    <p data-gs-zone="subheadline">The modern API platform that scales with your team. From prototype to production in minutes.</p>
+    <p data-gs-zone="website_zones:sub_headline">
+      The modern API platform that scales with your team. From prototype to production in minutes.
+    </p>
 
-    <!--
-      ZONE: cta-text
-      Only the button LABEL is personalized. The button design, color,
-      href, and hover state are all controlled by CSS (your design).
-    -->
     <a href="/demo" class="cta-btn">
-      <span data-gs-zone="cta-text">Start Free Trial</span>
+      <!--
+        ZONE: website_zones:cta_text (property zone — same collection)
+        Button LABEL is from memory. Design, color, href stay the same.
+      -->
+      <span data-gs-zone="website_zones:cta_text">Start Free Trial</span>
     </a>
   </section>
 
-  <!-- Features Section (not personalized in this demo) -->
+  <!-- ── STRUCTURED GENERATIVE ZONES ── coherent AI group ───────── -->
   <section class="features">
-    <h2>Why teams choose Acme</h2>
+    <!--
+      ZONES: benefits.title, benefits.description, benefits.cta (structured)
+      These three zones share the output name "benefits". The Edge API
+      generates them as ONE coherent JSON object via /prompt streaming:
+        { "title": "...", "description": "...", "cta": "..." }
+      Each field is delivered to its element as soon as the output group
+      finishes generating — progressively, not all-at-once.
+
+      Use structured zones when elements should complement each other.
+    -->
+    <h2 data-gs-zone="benefits.title">Why teams choose Acme</h2>
     <div class="feature-grid">
       <div class="feature-card">
         <h3>Lightning Fast</h3>
@@ -185,19 +227,28 @@
       </div>
       <div class="feature-card">
         <h3>Developer First</h3>
-        <p>Beautiful docs, SDKs in every language, and a CLI that just works.</p>
+        <p data-gs-zone="benefits.description">Beautiful docs, SDKs in every language, and a CLI that just works.</p>
       </div>
+    </div>
+    <div style="text-align: center; margin-top: 2rem;">
+      <a href="/features" style="color: #764ba2; font-weight: 600;">
+        <span data-gs-zone="benefits.cta">Explore all features</span> →
+      </a>
     </div>
   </section>
 
-  <!-- Proof Section — 1 personalized zone -->
+  <!-- ── FLAT GENERATIVE ZONE ── independent AI text ────────────── -->
   <section class="proof">
     <!--
-      ZONE: proof
-      Social proof text personalized by location.
-      "Trusted by 500+ companies" → "Trusted by 40+ companies in Austin"
+      ZONE: proof (flat generative zone)
+      Independent AI-generated text. Not grouped with any other zone.
+      data-gs-prompt provides specific instructions for this zone.
+      The AI uses visitor context (location, company) + brand guidelines.
     -->
-    <p data-gs-zone="proof">Trusted by 500+ companies worldwide to power their API infrastructure.</p>
+    <p data-gs-zone="proof"
+       data-gs-prompt="Social proof mentioning the visitor's city if located, or their industry if known. Reference our 99.9% uptime SLA. Max 2 sentences.">
+      Trusted by 500+ companies worldwide to power their API infrastructure.
+    </p>
   </section>
 
   <!-- Footer (not personalized) -->

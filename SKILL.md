@@ -40,24 +40,38 @@ For local development or self-hosted edge:
 <h1 data-gs-zone="collectionName:propertyName">Fallback text</h1>
 ```
 
-**Generative zone** — AI-written at serve time:
+**Structured generative zone** — grouped AI output (coherent multi-field):
+```html
+<h1 data-gs-zone="outputName.fieldName">Fallback text</h1>
+```
+
+**Flat generative zone** — AI-written at serve time:
 ```html
 <h1 data-gs-zone="zoneName">Fallback text</h1>
 ```
 
 **Rules:**
 - Contains a colon (`:`) → property zone → reads from Personize memory
-- No colon → generative zone → AI generates text
+- Contains a dot (`.`) → structured generative zone → zones with same output name are generated together as a coherent JSON object, each field streamed to its element progressively
+- No colon or dot → flat generative zone → AI generates independent text
 - The fallback text (element's existing content) is shown to search engines and when personalization is unavailable
 - gs.js sets `textContent` — NEVER `innerHTML` — XSS is impossible
 - Zone IDs must be unique per page
 - Maximum 20 zones per page
+- Structured zones: exactly one dot allowed (no deep paths like `hero.section.title`)
 
 **Valid examples:**
 ```html
+<!-- Property zones (instant from memory) -->
 <h1 data-gs-zone="website_zones:hero_headline">Welcome</h1>
 <p data-gs-zone="website_zones:sub_headline">Built for teams</p>
-<span data-gs-zone="cta-text">Get Started</span>
+
+<!-- Structured generative zones (grouped, coherent) -->
+<h1 data-gs-zone="hero.headline">Ship faster</h1>
+<p data-gs-zone="hero.subtitle">The modern platform</p>
+<span data-gs-zone="hero.cta">Get Started</span>
+
+<!-- Flat generative zones (independent) -->
 <p data-gs-zone="proof">Trusted by 500+ companies</p>
 <div data-gs-zone="client_portal:meeting_summary">Notes here</div>
 ```

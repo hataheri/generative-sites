@@ -64,7 +64,7 @@ Works on any CMS — WordPress, Webflow, Shopify, Squarespace, Next.js, plain HT
 
 ---
 
-## Two Types of Zones
+## Three Types of Zones
 
 ### Property zones — instant, from Personize memory
 
@@ -80,21 +80,35 @@ Format: `collectionName:propertyName`. Reads directly from a contact's Personize
 <h1 data-gs-zone="headline">Default headline</h1>
 ```
 
-Format: just a name (no colon). AI generates text using the visitor's context — location, company, profile, brand guidelines. Takes 2-5 seconds.
+Format: just a name (no colon, no dot). AI generates text using the visitor's context — location, company, profile, brand guidelines.
 
-### Mix both on the same page
+### Structured zones — grouped AI outputs
+
+```html
+<h1 data-gs-zone="hero.headline">Default headline</h1>
+<p data-gs-zone="hero.subtitle">Default subtitle</p>
+<button data-gs-zone="hero.cta">Get Started</button>
+```
+
+Format: `outputName.fieldName`. Zones with the same output name are generated together in one AI call. The AI produces a coherent JSON object and each field is delivered to its element as it's generated — **progressively, not all at once.**
+
+Use structured zones when multiple elements should be contextually consistent (a headline and subtitle that complement each other, a CTA that matches the headline's promise).
+
+### Mix all three on the same page
 
 ```html
 <!-- From Personize memory — instant -->
 <h1 data-gs-zone="website_zones:hero_headline">Welcome</h1>
-<p data-gs-zone="website_zones:sub_headline">Built for teams</p>
 
-<!-- AI-generated — uses visitor context -->
-<span data-gs-zone="cta-text">Get Started</span>
+<!-- Structured generative — coherent group, streamed progressively -->
+<p data-gs-zone="hero.subtitle">Built for teams</p>
+<button data-gs-zone="hero.cta">Get Started</button>
+
+<!-- Flat generative — independent AI text -->
 <p data-gs-zone="proof">Trusted by 500+ companies</p>
 ```
 
-Property zones cost zero. Generative zones cost one `prompt()` call total (all batched).
+Property zones cost zero. All generative zones (structured + flat) are batched into one `prompt()` call.
 
 ---
 
@@ -538,14 +552,22 @@ event: meta
 data: {"tier":"located","location":{"city":"Austin","region":"TX","country":"US"},"uid":"gs_abc123"}
 
 event: zone
-data: {"zone":"headline","text":"Trusted by teams across Texas","tier":"located","mode":"stream"}
+data: {"zone":"website_zones:hero_headline","text":"Trusted by teams across Texas","tier":"located","mode":"property"}
 
 event: zone
-data: {"zone":"cta-text","text":"Get started today","tier":"located","mode":"stream"}
+data: {"zone":"hero.subtitle","text":"The platform Austin's fastest companies rely on","tier":"located","mode":"generated"}
+
+event: zone
+data: {"zone":"hero.cta","text":"See It in Action","tier":"located","mode":"generated"}
+
+event: zone
+data: {"zone":"proof","text":"14 companies in Austin use our platform daily","tier":"located","mode":"generated"}
 
 event: done
-data: {"zones":["headline","cta-text"],"duration_ms":5200}
+data: {"zones":["website_zones:hero_headline","hero.subtitle","hero.cta","proof"],"duration_ms":3200}
 ```
+
+Structured zones (`hero.subtitle`, `hero.cta`) arrive progressively — as soon as the AI finishes each output group, not after all zones complete.
 
 ---
 
